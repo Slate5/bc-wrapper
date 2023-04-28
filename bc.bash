@@ -34,7 +34,8 @@ while read -erp "BC:${LINE_NUM}> " input; do
       continue
     elif [[ "${statement}" =~ ^\ *\$ ]]; then
       printf "\033[1;35mWarning: Bash output goes into BC's input automatically.\033[0m\n" >&2
-      statement=$(eval ${statement#*\$})
+      statement=$(bash -c "${statement#*\$}")
+      (( $? != 0 )) && continue
     elif [[ "${statement}" =~ (^| +)([io]?base)\ *=\ *(-?[0-9]+)( +|$) ]]; then
       input_base="${BASH_REMATCH[3]}"
   

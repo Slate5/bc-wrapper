@@ -18,39 +18,51 @@ history -r
 
 printf '\033[0m'
 
-coproc BC { bc -lq 2>&1; }
+coproc BC { bc -lq &>/proc/$$/fd/1; }
+
+exec > >(
+  while read -r bc_output; do
+    case "${bc_output}" in
+      *error*)
+        printf "\033[1;31m${bc_output}\033[0m\n" >&2
+        ;;
+      *warning*)
+        printf "\033[1;35m${bc_output}\033[0m\n" >&2
+        ;;
+      *)
+        printf "\033[1;35m=>\033[39m ${bc_output}\033[0m\n" >&2
+        ;;
+    esac
+    rm /dev/shm/BC_lock
+  done
+)
 
 while read -erp "BC:$(printf "%02d" ${LINE_NUM})${PROMPT_SIGN} " ${INDENT} input; do
   [[ -z "${input}" ]] && continue
+  touch /dev/shm/BC_lock
   history -s "${input}"
   (( LINE_NUM++ ))
 
-  [[ "${one_shot_prompt_change}" ]] && PROMPT_SIGN='>' && unset one_shot_prompt_change
+  if [[ "${input}" == *\{* && "${input}" != *\{*\}* ]]; then
+    (( BC_STATEMENTS_LVL++ ))
 
-  if [[ "${input}" == *[a-zA-Z]*\{* && "${input}" != *\{*\}* ]]; then
-    if test_input="$(bc -lq <<< "${input} break; }" |& grep 'error')"; then
-      printf "\033[1;31m${test_input}\033[0m\n" >&2
-      continue
+    INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
+    PROMPT_SIGN=$'\033[31m{\033[m'
+  elif [[ "${input}" == *\}* && "${input}" != *\{*\}* ]]; then
+    if (( --BC_STATEMENTS_LVL > 0 )); then
+      INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
+    else
+      PROMPT_SIGN='>'
+      unset INDENT
     fi
   fi
 
-  if [[ "${input}" =~ ^\ *((define +[a-zA-Z]+|if|while|for)\ *\(.*\{|\{)\ * ]]; then
-    (( BC_STATEMENTS_LVL++ ))
-    INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
-    PROMPT_SIGN=$'\033[31m{\033[m'
-  elif [[ "${input}" =~ ^\ *(define +[a-zA-Z]+|if|while|for)\ *\(.* ]]; then
-    one_shot_prompt_change=yes
-    PROMPT_SIGN=$'\033[31m{\033[m'
-    echo "${input}" >&${BC[1]}
-    continue
-  fi
-
-  for statement in ${input//[;\\]/$'\n'}; do
-    if [[ "${statement}" == "history" ]]; then
-      history
+  for statement in $(sed -E '/^ *for *\(/! s/;/\n/g' <<< "${input}"); do
+    if [[ "${statement}" =~ ^\ *history\ *$ ]]; then
+      history >&2
       continue
     elif [[ "${statement}" =~ ^\ *\$\$\ *$ ]]; then
-      bash -li
+      bash -li >&2
       continue
     elif [[ "${statement}" =~ ^\ *\$ ]]; then
       printf "\033[1;35mWarning: Bash output goes into BC's input automatically.\033[0m\n" >&2
@@ -82,40 +94,12 @@ while read -erp "BC:$(printf "%02d" ${LINE_NUM})${PROMPT_SIGN} " ${INDENT} input
           statement="obase=${adjusted_base}"
           ;;
       esac
+    elif [[ "${statement}" =~ ^\ *print ]]; then
+      statement="${statement}, \"\n\""
     fi
 
     echo "${statement}" >&${BC[1]}
-
-    if (( BC_STATEMENTS_LVL > 0 )); then
-      if [[ "${statement}" == *\}* ]]; then
-        (( BC_STATEMENTS_LVL-- ))
-
-        if (( BC_STATEMENTS_LVL > 0 )); then
-          INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
-        else
-          PROMPT_SIGN='>'
-          unset INDENT
-        fi
-      fi
-
-      (( BC_STATEMENTS_LVL > 0 )) && continue
-    fi
-
-    echo $'print "\004"' >&${BC[1]}
-
-    read -ru ${BC[0]} -d $'\004' bc_output
-
-    case "${bc_output}" in
-      *error*)
-        printf "\033[1;31m${bc_output}\033[0m\n" >&2
-        ;;
-      *warning*)
-        printf "\033[1;35m${bc_output}\033[0m\n" >&2
-        ;;
-      *?*)
-        printf "\033[1;35m=>\033[39m ${bc_output}\033[0m\n"
-        ;;
-    esac
+    while sleep 0.005; do [ -e /dev/shm/BC_lock ] || break; done
   done
 done
 

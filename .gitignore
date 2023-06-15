@@ -2,4 +2,5 @@
 *.swp
 *test*
 .bc_history
+bin/
 

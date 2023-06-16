@@ -21,6 +21,15 @@ bc() {
   ${bc_command} ${@}
 }
 
+# Gives a user real BC when STDIN/STDOUT is not tty or when flag is being used
+if [ ! -t 0 ]; then
+  cat | bc ${@}
+  exit
+elif [ -n "${1}" -o ! -t 1 ]; then
+  bc ${@}
+  exit
+fi
+
 # Env var tells BC to not truncate output line length
 export BC_LINE_LENGTH=0
 
@@ -86,7 +95,7 @@ trap_SIGINT() {
 }
 
 trap_EXIT() {
-  printf '\033[?25h'
+  printf '\033[?25h\033[G\033[0K'
   history -a
 }
 

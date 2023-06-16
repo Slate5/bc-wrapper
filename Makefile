@@ -21,5 +21,5 @@ remove: warn
 	@sudo update-alternatives --remove bc $(dir_path)/bc.bash
 
 warn:
-	@printf "\033[1;35mIf \033[3mupdate-alternatives\033[23m don't change \033[3mbc\033[23m, restart the shell.\033[m\n"
+	@printf "\033[1;35mIf \033[3mupdate-alternatives\033[23m doesn't change \033[3mbc\033[23m, restart the shell.\033[m\n"
 

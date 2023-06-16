@@ -29,11 +29,11 @@ LINE_NUM=1
 SATISFY_PS_DUMMY_LEN=''
 PS_LEN=7
 # `read` used for interaction with the user is fed with this PS_DUMMY to mimic
-# the length of human visible PS (PS_READY and PS_BUSY) that `printf`outputs.
+# the length of human visible PS (PS_READY and PS_BUSY) that `printf` outputs.
 # This is done to be able to colorize PS without the drawback that `read` has.
 # The drawback is: when the user starts manically pressing keys the `read` will
 # miscalculate its length because of the terminal VT100 escape code.
-# Manical users need all the support they can get...
+# Manic users need all the support they can get... 🐼
 PS_DUMMY=$'\033[G\033['"${SATISFY_PS_DUMMY_LEN}${PS_LEN}C"
 PS_READY=$'\033[G\033[1;32mBC\033[m:%02d> '
 PS_SIGN='>'
@@ -175,7 +175,7 @@ create_list() {
 modify_list() {
   local answer ascii_char_octal
 
-  local PS_opts='Available options [+-/*aosdq]: [ ]'
+  local PS_opts='Available options [+-*/aosdq]: [ ]'
   local PS_desc='(a - average, o - output, s - sort, d - descending sort, q - quit)'
   local input_position=$'\033[G\033['"$(( ${#PS_opts} - 2 ))C"
 

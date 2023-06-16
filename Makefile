@@ -8,7 +8,7 @@ install: warn
 	$(info Installing...)
 	@mkdir -p $(dir_path)/bin
 	@gcc $(dir_path)/lib/write_to_STDIN.c -o $(dir_path)/bin/write_to_STDIN
-ifneq ($(wildcard /home/$(USER)/.local/),)
+ifneq ($(wildcard /home/$(USER)/.local/bin/),)
 	@sudo update-alternatives --install /home/$(USER)/.local/bin/bc bc $(dir_path)/bc.bash 10
 	@sudo update-alternatives --set bc $(dir_path)/bc.bash
 else

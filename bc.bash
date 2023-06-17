@@ -195,7 +195,7 @@ modify_list() {
 
   while read -srN 1 -p "${PS}" answer; do
     case "${answer}" in
-      [+-/*]) input_list="${input_list//;/${answer}}" ;;
+      [+\-/*]) input_list="${input_list//;/${answer}}" ;;
       a) input_list="(${input_list//;/+}) / $(wc -c <<< "${input_list//[^;]}")" ;;
       o) : ;;
       s) input_list="$(sort -n <<< "${input_list//;/$'\n'}" | tr '\n' ';')" ;;

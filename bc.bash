@@ -70,7 +70,7 @@ bind_PS_refresher() {
     read -ru ${BC[0]} PS_current
   done
 
-  printf "${PS_current}"
+  printf '%s' "${PS_current}"
 }
 
 # Function used to trigger bind_PS_refresher(). Used when `read` removes
@@ -101,6 +101,7 @@ trap_EXIT() {
 
 autocomplete() {
   local IFS=$'|\n\t'
+  (( BC_STATEMENTS_LVL > 0 )) && declare -I COMPS_KEYWORDS+="|break|continue|halt|return "
   local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_LIB}"
   local trim_indent_line="${READLINE_LINE#${READLINE_LINE%%[![:space:]]*}}"
   local comps
@@ -122,36 +123,36 @@ autocomplete() {
     (( ++dist ))
 
     for comp in ${comps[@]}; do
-      if [[ -z "${st_done}" && "${COMPS_STATEMENTS//\\}" == *"${comp}"* ]]; then
+      if [[ -z "${st_done}" && "|${COMPS_STATEMENTS//\\}|" == *"|${comp}|"* ]]; then
         st_done=yes
         color=0
         row_len=${indent}
-        printf "\n%-${indent}s" 'Statements:' >&2
-      elif [[ -z "${kw_done}" && "${COMPS_KEYWORDS//\\}" == *"${comp}"* ]]; then
+        printf '\n%*s' "-${indent}" 'Statements:' >&2
+      elif [[ -z "${kw_done}" && "|${COMPS_KEYWORDS//\\}|" == *"|${comp}|"* ]]; then
         kw_done=yes
         color=0
         row_len=${indent}
-        printf "\n%-${indent}s" 'Keywords:' >&2
-      elif [[ -z "${var_done}" && "${COMPS_VAR//\\}" == *"${comp}"* ]]; then
+        printf '\n%*s' "-${indent}" 'Keywords:' >&2
+      elif [[ -z "${var_done}" && "|${COMPS_VAR//\\}|" == *"|${comp}|"* ]]; then
         var_done=yes
         color=0
         row_len=${indent}
-        printf "\n%-${indent}s" 'Variables:' >&2
-      elif [[ -z "${lib_done}" && "${COMPS_LIB//\\}" == *"${comp}"* ]]; then
+        printf '\n%*s' "-${indent}" 'Variables:' >&2
+      elif [[ -z "${lib_done}" && "|${COMPS_LIB//\\}|" == *"|${comp}|"* ]]; then
         lib_done=yes
         color=0
         row_len=${indent}
-        printf "\n%-${indent}s" 'Library:' >&2
+        printf '\n%*s' "-${indent}" 'Library:' >&2
       fi
 
       (( row_len += dist ))
       if (( row_len >= COLUMNS )); then
-        printf "\n%-${indent}s" >&2
+        printf '\n%*s' "-${indent}" >&2
         (( row_len = indent + dist ))
       fi
 
       (( color = color % 6 + 1 ))
-      printf "\033[1;3%dm%-${dist}s\033[m" ${color} "${comp}" >&2
+      printf '\033[1;3%dm%*s\033[m' ${color} "-${dist}" "${comp}" >&2
     done
 
     echo
@@ -188,8 +189,10 @@ modify_list() {
   local PS_desc='(a - average, o - output, s - sort, d - descending sort, q - quit)'
   local input_position=$'\033[G\033['"$(( ${#PS_opts} - 2 ))C"
 
-  local PS=$'\033[G\033[1;35m'"${PS_opts}"$'\033[m\n'"${PS_desc}"$'\033[A'"${input_position}"
+  local PS=$'\033[G\033[0K\033[1;35m'"${PS_opts}"$'\033[m\n'"${PS_desc}"$'\033[A'"${input_position}"
   local PS_wrong=$'\033[4C\033[1;31m'"Input unknown${input_position}"
+
+  stty -echo
 
   printf '\033[?25l\033[G\033[0KList detected: %s\n\n' "${input_list//;/, }"
 
@@ -226,23 +229,30 @@ modify_list() {
           fi
         fi
 
-        printf '\033[0K'
         continue
         ;;
     esac
 
-    printf '\033[1;32m%s\033[m\033[?25h\n' "${answer}"
-    [[ "${answer}" == q ]] && refresh_read_cmd
     break
   done
+
+  printf '\033[1;32m%s\033[m\033[?25h\n' "${answer}"
+  [[ "${answer}" == q ]] && refresh_read_cmd
+  stty echo
 }
 
-set -o emacs
+ignore_input_BC() {
+  statement='/* ignore */'
+  (( BC_STATEMENTS_LVL == 0 )) && input_type=$'/* \255 */'
+}
+
 trap refresh_read_cmd 28
 trap trap_SIGINT 2
 trap trap_EXIT 0
 
 history -r
+
+set -o emacs
 bind -x '"\C-i":"autocomplete"'
 bind -x '"\ev":"bind_PS_refresher"'
 bind -u 'reverse-search-history'
@@ -338,21 +348,27 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
     if [[ "${statement}" =~ ^\ *history\ *$ ]]; then
       history >&2
 
-      statement='/* ignore */'
-      input_type=$'/* \255 */'
+      ignore_input_BC
     elif [[ "${statement}" =~ ^\ *\$\$\ *$ ]]; then
       bash -li
 
-      statement='/* ignore */'
-      input_type=$'/* \255 */'
+      ignore_input_BC
     elif [[ "${statement}" =~ ^\ *\$ ]]; then
       statement="$(bash -c "${statement#*\$}" 2>&1)"
 
       if (( $? != 0 )); then
-        printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${statement}" >&2
+        if [[ -n "${statement}" ]]; then
+          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${statement}" >&2
+        else
+          printf '\033[G\033[0K\033[1;31mNon-zero exit code received.\033[m\n'
+        fi
 
-        statement='/* ignore */'
-        input_type=$'/* \255 */'
+        ignore_input_BC
+      elif [[ -z "${statement}" ]]; then
+        printf '\033[G\033[0K\033[1;35mWarning: Bash output ' >&2
+        printf 'seems to be empty. Nothing to do...\033[0m\n' >&2
+
+        ignore_input_BC
       else
         printf '\033[G\033[0K\033[1;35mWarning: Bash output ' >&2
         printf "goes into BC's input automatically.\033[0m\n" >&2
@@ -392,42 +408,108 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
     # get output from BC or not. E.g., input a = 2 doesn't output anything so PS
     # can immediately be green, but input 2^2222222 will output the calculation
     # and only then the script will colorize PS into the green.
+    # Also, this madness exists because BC act "weird" when an error happens
+    # inside the statement body. BC drops the whole statement input when an error
+    # happens, but doesn't close the statement's body ("}"). Therefore, the user's
+    # input is examined before sending it to BC so that the user can continuously
+    # write code inside the statement's body even when input yells an error.
     if [[ "${statement}" == *\{*\}* ]]; then
-      input_type=$'/* \255 */'
+      if (( BC_STATEMENTS_LVL > 0 )); then
+        test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+        if (( $? == 0 )); then
+          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+
+          statement='/* ignore */'
+        else
+          whole_statement+="${statement}"$'\n'
+        fi
+
+      else
+        input_type=$'/* \255 */'
+      fi
+
     elif [[ "${statement}" == *\{* ]]; then
       unset oneliner_statement
 
-      if test_input="$(bc -lq <<< "${statement}; quit; }" |& grep 'standard_in')"; then
+      test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+      if (( $? == 0 )); then
         printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
 
-        statement='/* ignore */'
-        (( BC_STATEMENTS_LVL == 0 )) && input_type=$'/* \255 */'
+        ignore_input_BC
       else
         (( BC_STATEMENTS_LVL++ ))
         INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
         PS_SIGN=$'\033[31m{\033[m'
-      fi
-    elif [[ -n "${oneliner_statement}" ]]; then
-      PS_SIGN='>'
-      unset oneliner_statement
 
-      input_type=$'/* \255 */'
-    elif [[ "${statement}" =~ ^\ *(if|while|for)\ *\(.* ]]; then
-      oneliner_statement=possible
-      PS_SIGN=$'\033[31m{\033[m'
-    elif [[ "${statement}" == *\}* ]]; then
-      if (( --BC_STATEMENTS_LVL > 0 )); then
-        INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
+        whole_statement+="${statement}"$'\n'
+      fi
+
+    elif [[ -n "${oneliner_statement}" ]]; then
+      if (( BC_STATEMENTS_LVL > 0 )); then
+        test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+        if (( $? == 0 )); then
+          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+
+          statement='{}'
+        else
+          whole_statement+="${statement}"$'\n'
+        fi
       else
         PS_SIGN='>'
-        unset INDENT
-
         input_type=$'/* \255 */'
       fi
+
+      unset oneliner_statement
+
+    elif [[ "${statement}" =~ ^\ *(if|while|for)\ *\(.* ]]; then
+      if (( BC_STATEMENTS_LVL > 0 )); then
+        test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+        if (( $? == 0 )); then
+          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+
+          statement='/* ignore */'
+        else
+          whole_statement+="${statement}"$'\n'
+          oneliner_statement=possible
+        fi
+      else
+        oneliner_statement=possible
+        PS_SIGN=$'\033[31m{\033[m'
+      fi
+
+    elif [[ "${statement}" == *\}* ]]; then
+      if (( BC_STATEMENTS_LVL > 0 )); then
+        test_input="$(bc -lq <<< "${whole_statement}${statement//\}/$'\nquit\n}'}" |& grep 'standard_in')"
+        if (( $? == 0 )); then
+          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+
+          statement='/* ignore */'
+        elif (( --BC_STATEMENTS_LVL > 0 )); then
+          INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
+          whole_statement+="${statement}"$'\n'
+        else
+          PS_SIGN='>'
+          unset INDENT
+          unset whole_statement
+
+          input_type=$'/* \255 */'
+        fi
+      fi
+
+    elif (( BC_STATEMENTS_LVL > 0 )); then
+      test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+      if (( $? == 0 )); then
+        printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+
+        statement='/* ignore */'
+      else
+        whole_statement+="${statement}"$'\n'
+      fi
+
     elif [[ "${statement}" =~ ^\ *[a-z0-9_]+(\[.+\])?\ *=\ *[a-z0-9_]+\ * ]]; then
       input_type=$'/* \255 */'
-    fi
 
+    fi
 
     PS_current="$(printf "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
 

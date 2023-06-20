@@ -456,7 +456,7 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
         fi
       else
         PS_SIGN='>'
-        input_type=$'/* \255 */'
+        statement+=$'; print "/* \255 */#'"${LINE_NUM}\""', "\n"'
       fi
 
       unset oneliner_statement
@@ -492,7 +492,7 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
           unset INDENT
           unset whole_statement
 
-          input_type=$'/* \255 */'
+          statement+=$'; print "/* \255 */#'"${LINE_NUM}\""', "\n"'
         fi
       fi
 

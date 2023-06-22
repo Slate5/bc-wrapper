@@ -105,7 +105,7 @@ autocomplete() {
   local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_LIB}"
   local trim_indent_line="${READLINE_LINE#${READLINE_LINE%%[![:space:]]*}}"
   local comps
-  local comp row_len color st_done kw_done var_done lib_done i dist=0 indent=12
+  local comp row_len color bg title_bg st_done kw_done var_done lib_done i dist=0 indent=12
   local position_part
 
   refresh_read_cmd
@@ -125,34 +125,44 @@ autocomplete() {
     for comp in ${comps[@]}; do
       if [[ -z "${st_done}" && "|${COMPS_STATEMENTS//\\}|" == *"|${comp}|"* ]]; then
         st_done=yes
-        color=0
+        color=232
+        bg=238
+        title_bg=237
         row_len=${indent}
-        printf '\n%*s' "-${indent}" 'Statements:' >&2
+        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" 'Statements:' >&2
       elif [[ -z "${kw_done}" && "|${COMPS_KEYWORDS//\\}|" == *"|${comp}|"* ]]; then
         kw_done=yes
-        color=0
+        color=232
+        bg=239
+        title_bg=236
         row_len=${indent}
-        printf '\n%*s' "-${indent}" 'Keywords:' >&2
+        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" 'Keywords:' >&2
       elif [[ -z "${var_done}" && "|${COMPS_VAR//\\}|" == *"|${comp}|"* ]]; then
         var_done=yes
-        color=0
+        color=232
+        bg=240
+        title_bg=235
         row_len=${indent}
-        printf '\n%*s' "-${indent}" 'Variables:' >&2
+        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" 'Variables:' >&2
       elif [[ -z "${lib_done}" && "|${COMPS_LIB//\\}|" == *"|${comp}|"* ]]; then
         lib_done=yes
-        color=0
+        color=232
+        bg=241
+        title_bg=234
         row_len=${indent}
-        printf '\n%*s' "-${indent}" 'Library:' >&2
+        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" 'Library:' >&2
       fi
 
       (( row_len += dist ))
       if (( row_len >= COLUMNS )); then
-        printf '\n%*s' "-${indent}" >&2
+        color=232
+        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" >&2
         (( row_len = indent + dist ))
       fi
 
-      (( color = color % 6 + 1 ))
-      printf '\033[1;3%dm%*s\033[m' ${color} "-${dist}" "${comp}" >&2
+      (( color = (color + 230) % 233 ))
+      printf '\033[1;38;5;%d;48;5;%dm%*s\033[K\033[m' ${color} ${bg} "-${dist}" "${comp}" >&2
+
     done
 
     echo

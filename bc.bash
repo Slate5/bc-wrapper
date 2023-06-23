@@ -120,7 +120,7 @@ autocomplete() {
     for i in ${AUTOCOMPLETE_OPTS}; do
       (( dist < ${#i} )) && dist=${#i}
     done
-    (( ++dist ))
+    #(( ++dist ))
 
     for comp in ${comps[@]}; do
       if [[ -z "${st_done}" && "|${COMPS_STATEMENTS//\\}|" == *"|${comp}|"* ]]; then
@@ -161,7 +161,7 @@ autocomplete() {
       fi
 
       (( color = (color + 230) % 233 ))
-      printf '\033[1;38;5;%d;48;5;%dm%*s\033[K\033[m' ${color} ${bg} "-${dist}" "${comp}" >&2
+      printf '\033[1;38;5;%d;48;5;%dm %*s\033[K\033[m' ${color} ${bg} "-${dist}" "${comp}" >&2
 
     done
 

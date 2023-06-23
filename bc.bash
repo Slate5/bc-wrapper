@@ -105,7 +105,9 @@ autocomplete() {
   local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_LIB}"
   local trim_indent_line="${READLINE_LINE#${READLINE_LINE%%[![:space:]]*}}"
   local comps
-  local comp row_len color bg title_bg st_done kw_done var_done lib_done i dist=0 indent=12
+  local i dist=0 indent=12
+  local max_cols_st max_cols_kw max_cols_var max_cols_lib max_cols
+  local comp row_len color bg title_bg st_done kw_done var_done lib_done
   local position_part
 
   refresh_read_cmd
@@ -120,7 +122,26 @@ autocomplete() {
     for i in ${AUTOCOMPLETE_OPTS}; do
       (( dist < ${#i} )) && dist=${#i}
     done
-    #(( ++dist ))
+
+    for i in ${comps[@]}; do
+      if [[ "|${COMPS_STATEMENTS//\\}|" == *"|${i}|"* ]]; then
+        (( max_cols_st += dist + 1 ))
+      elif [[ "|${COMPS_KEYWORDS//\\}|" == *"|${i}|"* ]]; then
+        (( max_cols_kw += dist + 1 ))
+      elif [[ "|${COMPS_VAR//\\}|" == *"|${i}|"* ]]; then
+        (( max_cols_var += dist + 1 ))
+      elif [[ "|${COMPS_LIB//\\}|" == *"|${i}|"* ]]; then
+        (( max_cols_lib += dist + 1 ))
+      fi
+    done
+
+    max_cols=$(printf "${max_cols_lib}\n${max_cols_var}\n${max_cols_kw}\n${max_cols_st}" | sort -n | tail -n 1)
+
+    (( max_cols += indent ))
+
+    while (( max_cols > COLUMNS )); do
+      (( max_cols-= dist+1 ))
+    done
 
     for comp in ${comps[@]}; do
       if [[ -z "${st_done}" && "|${COMPS_STATEMENTS//\\}|" == *"|${comp}|"* ]]; then
@@ -129,39 +150,48 @@ autocomplete() {
         bg=238
         title_bg=237
         row_len=${indent}
-        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" 'Statements:' >&2
+
+        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
+        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" 'Statements:' >&2
       elif [[ -z "${kw_done}" && "|${COMPS_KEYWORDS//\\}|" == *"|${comp}|"* ]]; then
         kw_done=yes
         color=232
         bg=239
         title_bg=236
         row_len=${indent}
-        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" 'Keywords:' >&2
+
+        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
+        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" 'Keywords:' >&2
       elif [[ -z "${var_done}" && "|${COMPS_VAR//\\}|" == *"|${comp}|"* ]]; then
         var_done=yes
         color=232
         bg=240
         title_bg=235
         row_len=${indent}
-        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" 'Variables:' >&2
+
+        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
+        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" 'Variables:' >&2
       elif [[ -z "${lib_done}" && "|${COMPS_LIB//\\}|" == *"|${comp}|"* ]]; then
         lib_done=yes
         color=232
         bg=241
         title_bg=234
         row_len=${indent}
-        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" 'Library:' >&2
+
+        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
+        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" 'Library:' >&2
       fi
 
-      (( row_len += dist ))
+      (( row_len += dist + 1 ))
       if (( row_len >= COLUMNS )); then
         color=232
-        printf '\n\033[1;48;5;%dm%*s' ${title_bg} "-${indent}" >&2
-        (( row_len = indent + dist ))
+        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
+        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" >&2
+        (( row_len = indent + dist + 1 ))
       fi
 
       (( color = (color + 230) % 233 ))
-      printf '\033[1;38;5;%d;48;5;%dm %*s\033[K\033[m' ${color} ${bg} "-${dist}" "${comp}" >&2
+      printf '\033[1;38;5;%d;48;5;%dm %*s\033[m' ${color} ${bg} "-${dist}" "${comp}" >&2
 
     done
 

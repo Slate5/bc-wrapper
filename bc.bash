@@ -263,6 +263,7 @@ trap trap_EXIT 0
 history -r
 
 set -o emacs
+bind 'set enable-bracketed-paste off'
 bind -x '"\C-i":"autocomplete"'
 bind -x '"\ev":"bind_PS_refresher"'
 bind -u 'reverse-search-history'

@@ -76,13 +76,13 @@ bind_PS_refresher() {
 # Function used to trigger bind_PS_refresher(). Used when `read` removes
 # `printf`'s PS, e.g. SIGWINCH, autocomplete...
 refresh_read_cmd() {
-  ${HOME_DIR}/bin/write_to_STDIN v
+  ${HOME_DIR}/bin/write_to_STDIN 
 }
 
 # When SIGINT is received, BC does not clean STDIN. This function
 # flushes STDIN and resets any nested statement.
 trap_SIGINT() {
-  ${HOME_DIR}/bin/write_to_STDIN v
+  ${HOME_DIR}/bin/write_to_STDIN 
 
   if (( BC_STATEMENTS_LVL > 0 )); then
     unset INDENT
@@ -295,7 +295,7 @@ history -r
 set -o emacs
 bind 'set enable-bracketed-paste off'
 bind -x '"\C-i":"autocomplete"'
-bind -x '"\ev":"bind_PS_refresher"'
+bind -x '"\C-~":"bind_PS_refresher"'
 bind -u 'reverse-search-history'
 bind -u 'forward-search-history'
 

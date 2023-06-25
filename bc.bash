@@ -99,6 +99,14 @@ trap_SIGINT() {
 trap_EXIT() {
   printf '\033[?25h\033[G\033[0K'
   history -a
+
+  # `kill 0` would cause "Terminated" message and `wait` wouldn't help because it
+  # wouldn't be executed at all. To avoid that message, child processes are
+  # `kill`-ed one by one, from youngest to oldest.
+  for pid in $(pgrep -g $$ | sort -nr); do
+    (( pid == $$ )) && continue
+    kill ${pid} &>/dev/null && wait ${pid} &>/dev/null
+  done
 }
 
 autocomplete() {
@@ -351,7 +359,8 @@ coproc BC {
       printf "${PS_READY}" ${LINE_NUM} >&2
       refresh_read_cmd
     done
-  kill 0
+
+  kill -0 $$ &>/dev/null && ${HOME_DIR}/bin/write_to_STDIN 
 }
 
 PS_current="$(printf "${PS_READY}" ${LINE_NUM} | tee /dev/stderr)"

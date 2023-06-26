@@ -226,15 +226,22 @@ autocomplete() {
 
 create_list() {
   local list_line
-
-  input_list="${input}"
+  [[ "${input}" =~ ^[[:space:]]*$ ]] || input_list="${input};"
 
   while :; do
     read -ser list_line
-    input_list+=";${list_line}"
+    [[ "${list_line}" =~ ^[[:space:]]*$ ]] || input_list+="${list_line};"
 
     read -t 0 || break
   done
+
+  if [[ -n "${input_list}" ]]; then
+    input_list="${input_list:0:-1}"
+    return 0
+  else
+    printf '\033[G\033[0K\033[35mEmpty list detected...\033[m\n' >&2
+    return 1
+  fi
 }
 
 modify_list() {
@@ -259,9 +266,10 @@ modify_list() {
       s) input_list="$(sort -n <<< "${input_list//;/$'\n'}" | tr '\n' ';')" ;;
       d) input_list="$(sort -rn <<< "${input_list//;/$'\n'}" | tr '\n' ';')" ;;
       q) unset input_list ;;
-      $'\001') # Caught when SIGINT received, thanks to trap_SIGINT's <CTRL><A>
+      []) # Caught when SIGINT received, thanks to trap_SIGINT
         unset input_list
-        read -t 0.005
+        read -n 1000 -t 0.005
+        printf "${PS}"
         answer=q
         ;;
       *) # Any other input will warn the user and loop again
@@ -292,7 +300,6 @@ modify_list() {
   done
 
   printf '\033[1;32m%s\033[m\033[?25h\n' "${answer}"
-  [[ "${answer}" == q ]] && refresh_read_cmd
   stty echo
 }
 
@@ -320,15 +327,18 @@ coproc BC {
   bc -liq |&
     while read -r bc_output; do
       case "${bc_output}" in
-        *standard_in*|*error*)
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${bc_output}" >&2
-          ;;
-        *warning*|*interrupt*)
-          if [[ -n "${statement_interrupted}" && "${bc_output}" == *"interrupt"* ]]; then
+        *interrupt*)
+          if [[ -n "${statement_interrupted}" ]]; then
             unset statement_interrupted
             continue
           fi
 
+          printf '\033[G\033[0K\033[1;33m%s\033[m\n' "${bc_output}" >&2
+          ;;
+        *standard_in*|*error*)
+          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${bc_output}" >&2
+          ;;
+        *warning*)
           printf '\033[G\033[0K\033[1;35m%s\033[m\n' "${bc_output}" >&2
           ;;
         *$'/* \254 */#'*) # Type of input that shouldn't print green PS, e.g. 2^222222
@@ -378,15 +388,16 @@ coproc BC {
 PS_current="$(printf "${PS_READY}" ${LINE_NUM} | tee /dev/stderr)"
 
 while read -erp "${PS_DUMMY}" ${INDENT} input; do
-  if [[ -z "${input}" ]]; then
+  if read -t 0; then
+    create_list && modify_list
+
+    if [[ -z "${input_list}" ]]; then
+      refresh_read_cmd
+      continue
+    fi
+  elif [[ -z "${input}" ]]; then
     refresh_read_cmd
     continue
-  fi
-
-  if read -t 0; then
-    create_list
-    modify_list
-    [[ -z "${input_list}" ]] && continue
   else
     history -s "${input}"
   fi

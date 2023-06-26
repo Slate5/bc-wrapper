@@ -509,42 +509,49 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
     # happens, but doesn't close the statement's body ("}"). Therefore, the user's
     # input is examined before sending it to BC so that the user can continuously
     # write code inside the statement's body even when input yells an error.
-    if [[ "${statement}" == *\{*\}* ]]; then
-      if (( BC_STATEMENTS_LVL > 0 )); then
-        test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
-        if (( $? == 0 )); then
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+    if [[ "${statement}" == *[{}]* ]]; then
+      opening_braces_num=$(printf "${statement//[^\{]}" | wc -c)
+      closing_braces_num=$(printf "${statement//[^\}]}" | wc -c)
 
-          statement='/* ignore */'
-        else
-          whole_statement+="${statement}"$'\n'
-        fi
-
+      if (( BC_STATEMENTS_LVL + opening_braces_num == closing_braces_num )); then
+        test_input="${whole_statement}${statement%\}*}"$'\nquit\n}'"${statement##*\}}"
       else
-        input_type=$'/* \255 */'
+        test_input="${whole_statement}${statement}"$'\nquit'
       fi
 
-    elif [[ "${statement}" == *\{* ]]; then
-      unset oneliner_statement
-
-      test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+      test_output="$(bc -lq <<< "${test_input}" |& grep 'standard_in')"
       if (( $? == 0 )); then
-        printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+        printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_output}" >&2
 
         ignore_input_BC
       else
-        (( BC_STATEMENTS_LVL++ ))
-        INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
-        PS_SIGN=$'\033[31m{\033[m'
-
+        unset oneliner_statement
         whole_statement+="${statement}"$'\n'
+
+        for (( i = 0; i < opening_braces_num; ++i )); do
+          (( BC_STATEMENTS_LVL++ ))
+          INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
+          PS_SIGN=$'\033[31m{\033[m'
+        done
+
+        for (( i = 0; i < closing_braces_num; ++i )); do
+          if (( --BC_STATEMENTS_LVL > 0 )); then
+            INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
+          else
+            PS_SIGN='>'
+            unset INDENT
+            unset whole_statement
+
+            statement+=$'; print "/* \255 */#'"${LINE_NUM}\""', "\n"'
+          fi
+        done
       fi
 
     elif [[ -n "${oneliner_statement}" ]]; then
       if (( BC_STATEMENTS_LVL > 0 )); then
-        test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+        test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
         if (( $? == 0 )); then
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_output}" >&2
 
           statement='{}'
         else
@@ -559,9 +566,9 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
 
     elif [[ "${statement}" =~ ^\ *(if|while|for)\ *\(.* ]]; then
       if (( BC_STATEMENTS_LVL > 0 )); then
-        test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+        test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
         if (( $? == 0 )); then
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_output}" >&2
 
           statement='/* ignore */'
         else
@@ -573,36 +580,17 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
         PS_SIGN=$'\033[31m{\033[m'
       fi
 
-    elif [[ "${statement}" == *\}* ]]; then
-      if (( BC_STATEMENTS_LVL > 0 )); then
-        test_input="$(bc -lq <<< "${whole_statement}${statement//\}/$'\nquit\n}'}" |& grep 'standard_in')"
-        if (( $? == 0 )); then
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
-
-          statement='/* ignore */'
-        elif (( --BC_STATEMENTS_LVL > 0 )); then
-          INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
-          whole_statement+="${statement}"$'\n'
-        else
-          PS_SIGN='>'
-          unset INDENT
-          unset whole_statement
-
-          statement+=$'; print "/* \255 */#'"${LINE_NUM}\""', "\n"'
-        fi
-      fi
-
     elif (( BC_STATEMENTS_LVL > 0 )); then
-      test_input="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+      test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
       if (( $? == 0 )); then
-        printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_input}" >&2
+        printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_output}" >&2
 
         statement='/* ignore */'
       else
         whole_statement+="${statement}"$'\n'
       fi
 
-    elif [[ "${statement}" =~ ^\ *[a-z0-9_]+(\[.+\])?\ *=\ *[a-z0-9_]+\ * ]]; then
+    elif [[ "${statement}" =~ ^\ *[a-z0-9_]+(\[.+\])?\ *=[^=] ]]; then
       input_type=$'/* \255 */'
 
     fi

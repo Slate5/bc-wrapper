@@ -155,7 +155,7 @@ autocomplete() {
     (( max_cols += indent ))
 
     while (( max_cols > COLUMNS )); do
-      (( max_cols-= dist+1 ))
+      (( max_cols -= dist + 1 ))
     done
 
     for comp in ${comps[@]}; do
@@ -198,7 +198,7 @@ autocomplete() {
       fi
 
       (( row_len += dist + 1 ))
-      if (( row_len >= COLUMNS )); then
+      if (( row_len > COLUMNS )); then
         color=232
         printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
         printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" >&2

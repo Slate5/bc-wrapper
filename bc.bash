@@ -50,7 +50,7 @@ PS_BUSY=$'\033[G\033[1;33mBC\033[m:%02d%s '
 
 # Autocomplete statements, separated into 4 classes
 COMPS_STATEMENTS='define f() {|if () {|while () {|for (i=1; i<; ++i) {'
-COMPS_KEYWORDS='print \"\"|last|history|\$|\$\$|quit'
+COMPS_KEYWORDS='print \"\"|last|history|warranty|limits|\$|\$\$|quit'
 COMPS_VAR='scale = |base = |ibase = |obase = '
 COMPS_LIB='length()|scale()|sqrt()|s()|c()|a()|l()|e()|j()'
 
@@ -111,7 +111,12 @@ trap_EXIT() {
 
 autocomplete() {
   local IFS=$'|\n\t'
-  (( BC_STATEMENTS_LVL > 0 )) && declare -I COMPS_KEYWORDS+="|break|continue|halt|return "
+
+  if (( BC_STATEMENTS_LVL > 0 )); then
+    declare -I COMPS_KEYWORDS+="|break|continue|halt|return "
+    COMPS_KEYWORDS="$(sed -E 's/\|?(warranty|limits)\|?/|/g' <<< "${COMPS_KEYWORDS}")"
+  fi
+
   local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_LIB}"
   local trim_indent_line="${READLINE_LINE#${READLINE_LINE%%[![:space:]]*}}"
   local comps
@@ -341,6 +346,13 @@ coproc BC {
           ;;
         *$'/* \255 */#'*) # Type of input that should print green PS, e.g. a = 2
           (( LINE_NUM = ${bc_output##*#} ))
+
+          if [[ "${bc_output}" =~ ^\ *(warranty|limits)\ +/\*\  ]]; then
+            while read -t 0; do
+              IFS= read -r line
+              printf '\033[G\033[0K%s\n' "${line}" >&2
+            done
+          fi
           ;;
         *?*)
           printf '\033[G\033[0K\033[1;35m=>\033[39m %s\033[m\n' "${bc_output}" >&2
@@ -441,6 +453,13 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
       fi
     elif [[ "${statement}" =~ \ *print( *\".*\"| +[a-z]) ]]; then
       statement="$(sed 's/print.*["a-zA-Z0-9]/&, "\\n"/' <<< "${statement}")"
+
+    elif [[ "${statement}" =~ ^\ *(warranty|limits)\ *$ ]]; then
+      if (( BC_STATEMENTS_LVL == 0 )); then
+        input_type=$'/* \255 */'
+      else
+        statement='/* ignore */'
+      fi
 
     elif [[ "${statement}" =~ (^| +)([io]?base)\ *=\ *(-?[0-9]+)( +|$) ]]; then
       input_base="${BASH_REMATCH[3]}"

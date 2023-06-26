@@ -316,10 +316,18 @@ history -r
 
 set -o emacs
 bind 'set enable-bracketed-paste off'
+for fun in reverse-search-history forward-search-history possible-filename-completions\
+           possible-hostname-completions possible-username-completions\
+           possible-variable-completions possible-completions\
+           possible-command-completions insert-completions glob-list-expansions\
+           glob-complete-word edit-and-execute-command dynamic-complete-history\
+           display-shell-version complete-command complete-filename complete-hostname\
+           complete-into-braces complete-username complete-variable complete
+do
+  bind -u ${fun}
+done
 bind -x '"\C-i":"autocomplete"'
 bind -x '"\C-~":"bind_PS_refresher"'
-bind -u 'reverse-search-history'
-bind -u 'forward-search-history'
 
 coproc BC {
   trap '' 2
@@ -414,13 +422,14 @@ while read -erp "${PS_DUMMY}" ${INDENT} input; do
     input="${input_list}"
     unset input_list
     IFS=$'\n'
-  elif [[ "${input}" =~ ^\ *for\ *\( ]]; then
+  elif [[ "${input}" =~ ^[[:space:]]*for[[:space:]]*\( ]]; then
     IFS=$'\n'
   else
     IFS=$';\n'
   fi
 
   for statement in ${input}; do
+    statement="${statement//$'\t'/ }"
     input_type=$'/* \254 */'
 
     if [[ "${statement}" == *\"* ]]; then

@@ -49,7 +49,7 @@ PS_SIGN='>'
 PS_BUSY=$'\033[G\033[1;33mBC\033[m:%02d%s '
 
 # Autocomplete statements, separated into 4 classes
-COMPS_STATEMENTS='define f() {|if () {|while () {|for (i=1; i<; ++i) {'
+COMPS_STATEMENTS='define f() {|if () {|while () {|for (i=0; i<; ++i) {'
 COMPS_KEYWORDS='print \"\"|last|history|warranty|limits|\$|\$\$|quit'
 COMPS_VAR='scale = |base = |ibase = |obase = '
 COMPS_LIB='length()|scale()|sqrt()|s()|c()|a()|l()|e()|j()'

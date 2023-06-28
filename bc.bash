@@ -403,7 +403,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       refresh_read_cmd
       continue
     fi
-  elif [[ "${input}" =~ ^[[:space:]]*$ ]]; then
+  elif [[ "${input//;}" =~ ^[[:space:]]*$ ]]; then
     refresh_read_cmd
     continue
   else

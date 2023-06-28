@@ -67,7 +67,7 @@ HISTTIMEFORMAT=$(echo -e '\e[1;31m%T\e[33m %d/%m/%y ⮕\e[0;1m  ')
 # BC finished a task (e.g. long calculation).
 bind_PS_refresher() {
   while read -t 0 -u ${BC[0]}; do
-    read -ru ${BC[0]} PS_current
+    IFS= read -ru ${BC[0]} PS_current
   done
 
   printf '%s' "${PS_current}"
@@ -229,7 +229,7 @@ create_list() {
   [[ "${input}" =~ ^[[:space:]]*$ ]] || input_list="${input};"
 
   while :; do
-    read -ser list_line
+    IFS= read -ser list_line
     [[ "${list_line}" =~ ^[[:space:]]*$ ]] || input_list+="${list_line};"
 
     read -t 0 || break
@@ -258,7 +258,7 @@ modify_list() {
 
   printf '\033[?25l\033[G\033[0KList detected: %s\n\n' "${input_list//;/, }"
 
-  while read -srN 1 -p "${PS}" answer; do
+  while IFS= read -srN 1 -p "${PS}" answer; do
     case "${answer}" in
       [+\-/*]) input_list="${input_list//;/${answer}}" ;;
       a) input_list="(${input_list//;/+}) / $(wc -c <<< "${input_list//[^;]}")" ;;
@@ -282,7 +282,7 @@ modify_list() {
           fi
         fi
 
-        read -t 0.8 -srN 1 -p "${PS_wrong}${answer}" answer
+        IFS= read -t 0.8 -srN 1 -p "${PS_wrong}${answer}" answer
 
         if (( $(printf -- '%s' "${answer}" | wc -c) == 1 )); then
           ascii_char_octal=$(printf -- '%s' "${answer}" | od -dA n)
@@ -333,7 +333,7 @@ coproc BC {
   trap '' 2
 
   bc -liq |&
-    while read -r bc_output; do
+    while IFS= read -r bc_output; do
       case "${bc_output}" in
         *interrupt*)
           if [[ -n "${statement_interrupted}" ]]; then
@@ -395,7 +395,7 @@ coproc BC {
 
 PS_current="$(printf "${PS_READY}" ${LINE_NUM} | tee /dev/stderr)"
 
-while read -erp "${PS_DUMMY}" ${INDENT} input; do
+while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
   if read -t 0; then
     create_list && modify_list
 

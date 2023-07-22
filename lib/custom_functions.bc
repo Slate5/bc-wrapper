@@ -1,0 +1,31 @@
+pi = 3.14159265358979323846
+e = 2.71828182845904523536
+
+define log(arg) {
+  return l(arg) / l(10)
+}
+
+define lg(arg, base) {
+  return l(arg) / l(base)
+}
+
+define sin(angle_deg) {
+  auto angle_rad
+  angle_rad = angle_deg * pi / 180
+  return s(angle_rad)
+}
+
+define cos(angle_deg) {
+  auto angle_rad
+  angle_rad = angle_deg * pi / 180
+  return c(angle_rad)  
+}
+
+define tan(angle_deg) {
+  return sin(angle_deg) / cos(angle_deg)
+}
+
+define ctg(angle_deg) {
+  return cos(angle_deg) / sin(angle_deg)
+}
+

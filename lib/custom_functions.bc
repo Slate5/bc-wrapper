@@ -18,7 +18,7 @@ define sin(angle_deg) {
 define cos(angle_deg) {
   auto angle_rad
   angle_rad = angle_deg * pi / 180
-  return c(angle_rad)  
+  return c(angle_rad)
 }
 
 define tan(angle_deg) {

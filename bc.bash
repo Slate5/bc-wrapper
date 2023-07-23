@@ -474,7 +474,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         printf "goes into BC's input automatically.\033[0m\n" >&2
       fi
     elif [[ "${statement}" =~ \ *print( *\".*\"| +[a-z]) ]]; then
-      statement="$(sed 's/print.*["a-zA-Z0-9]/&, "\\n"/' <<< "${statement}")"
+      statement="$(sed -E 's/print(.*,)? *(".*"|[^ ;]+)/&, "\\n"/' <<< "${statement}")"
 
     elif [[ "${statement}" =~ ^\ *(warranty|limits)\ *$ ]]; then
       if (( BC_STATEMENTS_LVL == 0 )); then

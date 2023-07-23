@@ -433,7 +433,9 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     input_type=$'/* \254 */'
 
     if [[ "${statement}" == *\"* ]]; then
-      (( BC_STATEMENTS_LVL == 0 )) && input_type=$'/* \255 */'
+      if (( BC_STATEMENTS_LVL == 0 )) && [[ "${statement}" =~ ^\ *\" ]]; then
+        input_type=$'/* \255 */'
+      fi
 
       if [[ "${statement}" != *\"*\"* ]]; then
         printf '\033[G\033[0K\033[1;31mSyntax error: multi-line ' >&2

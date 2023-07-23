@@ -350,7 +350,7 @@ coproc BC {
           printf '\033[G\033[0K\033[1;35m%s\033[m\n' "${bc_output}" >&2
           ;;
         *$'/* \254 */#'*) # Type of input that shouldn't print green PS, e.g. 2^222222
-          (( LINE_NUM = ${bc_output##*#} ))
+          (( LINE_NUM = $(grep -o '^[0-9]*' <<< ${bc_output##*#}) ))
 
           # Upon receiving SIGINT, trap_SIGINT() close all statements with "}". That
           # could potentially cause infinite loop in a background e.g. while (1) {}
@@ -363,7 +363,7 @@ coproc BC {
           continue
           ;;
         *$'/* \255 */#'*) # Type of input that should print green PS, e.g. a = 2
-          (( LINE_NUM = ${bc_output##*#} ))
+          (( LINE_NUM = $(grep -o '^[0-9]*' <<< ${bc_output##*#}) ))
 
           if [[ "${bc_output}" =~ ^\ *(warranty|limits)\ +/\*\  ]]; then
             while read -t 0; do
@@ -551,7 +551,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
             unset INDENT
             unset whole_statement
 
-            statement+=$'; print "/* \255 */#'"${LINE_NUM}\""', "\n"'
+            statement+=$'; print "/* \255 */#'"${LINE_NUM}\n\""
           fi
         done
       fi
@@ -568,7 +568,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         fi
       else
         PS_SIGN='>'
-        statement+=$'; print "/* \255 */#'"${LINE_NUM}\""', "\n"'
+        statement+=$'; print "/* \255 */#'"${LINE_NUM}\n\""
       fi
 
       unset oneliner_statement

@@ -30,6 +30,8 @@ elif [ -n "${1}" -o ! -t 1 ]; then
   exit
 fi
 
+HOME_DIR="$(dirname $(readlink -en $0))"
+
 # Env var tells BC to not truncate output line length
 export BC_LINE_LENGTH=0
 
@@ -53,8 +55,10 @@ COMPS_STATEMENTS='define f() {|if () {|while () {|for (i=0; i<; ++i) {'
 COMPS_KEYWORDS='print \"\"|last|history|warranty|limits|\$|\$\$|quit'
 COMPS_VAR='scale = |base = |ibase = |obase = '
 COMPS_LIB='length()|scale()|sqrt()|s()|c()|a()|l()|e()|j()'
-
-HOME_DIR="$(dirname $(readlink -en $0))"
+COMPS_CUSTOM="$(awk -F '[(= ]' '
+                  /^[a-z]+ *=/ { printf "%s|", $1 }
+                  /^define / { printf "%s()|", $2 }
+                ' ${HOME_DIR}/lib/custom_functions.bc)"
 
 HISTFILE=${HOME_DIR}/.bc_history
 HISTCONTROL='ignoredups:ignorespace'
@@ -109,6 +113,14 @@ trap_EXIT() {
   done
 }
 
+# Helper function for autocomplete(), helpless attempt to make this wet script DRY...
+autocomplete_print() {
+  color=232
+
+  printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
+  printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" "${1}" >&2
+}
+
 autocomplete() {
   local IFS=$'|\n\t'
 
@@ -117,12 +129,12 @@ autocomplete() {
     COMPS_KEYWORDS="$(sed -E 's/\|?(warranty|limits)\|?/|/g' <<< "${COMPS_KEYWORDS}")"
   fi
 
-  local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_LIB}"
+  local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_LIB}|${COMPS_CUSTOM}"
   local trim_indent_line="${READLINE_LINE#${READLINE_LINE%%[![:space:]]*}}"
   local comps
   local i dist=0 indent=12
-  local max_cols_st max_cols_kw max_cols_var max_cols_lib max_cols
-  local comp row_len color bg title_bg st_done kw_done var_done lib_done
+  local max_cols_st max_cols_kw max_cols_var max_cols_lib max_cols_cus max_cols
+  local comp row_len color bg title_bg st_done kw_done var_done lib_done cus_done
   local position_part
 
   refresh_read_cmd
@@ -147,10 +159,12 @@ autocomplete() {
         (( max_cols_var += dist + 1 ))
       elif [[ "|${COMPS_LIB//\\}|" == *"|${i}|"* ]]; then
         (( max_cols_lib += dist + 1 ))
+      elif [[ "|${COMPS_CUSTOM//\\}|" == *"|${i}|"* ]]; then
+        (( max_cols_cus += dist + 1 ))
       fi
     done
 
-    max_cols=$(printf "${max_cols_lib}\n${max_cols_var}\n${max_cols_kw}\n${max_cols_st}" | sort -n | tail -n 1)
+    max_cols=$(printf "${max_cols_st}\n${max_cols_kw}\n${max_cols_var}\n${max_cols_lib}\n${max_cols_cus}" | sort -n | tail -n 1)
 
     (( max_cols += indent ))
 
@@ -161,47 +175,44 @@ autocomplete() {
     for comp in ${comps[@]}; do
       if [[ -z "${st_done}" && "|${COMPS_STATEMENTS//\\}|" == *"|${comp}|"* ]]; then
         st_done=yes
-        color=232
         bg=238
         title_bg=237
         row_len=${indent}
 
-        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
-        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" 'Statements:' >&2
+        autocomplete_print 'Statements:'
       elif [[ -z "${kw_done}" && "|${COMPS_KEYWORDS//\\}|" == *"|${comp}|"* ]]; then
         kw_done=yes
-        color=232
         bg=239
         title_bg=236
         row_len=${indent}
 
-        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
-        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" 'Keywords:' >&2
+        autocomplete_print 'Keywords:'
       elif [[ -z "${var_done}" && "|${COMPS_VAR//\\}|" == *"|${comp}|"* ]]; then
         var_done=yes
-        color=232
         bg=240
         title_bg=235
         row_len=${indent}
 
-        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
-        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" 'Variables:' >&2
+        autocomplete_print 'Variables:'
       elif [[ -z "${lib_done}" && "|${COMPS_LIB//\\}|" == *"|${comp}|"* ]]; then
         lib_done=yes
-        color=232
         bg=241
         title_bg=234
         row_len=${indent}
 
-        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
-        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" 'Library:' >&2
+        autocomplete_print 'Library:'
+      elif [[ -z "${cus_done}" && "|${COMPS_CUSTOM//\\}|" == *"|${comp}|"* ]]; then
+        cus_done=yes
+        bg=242
+        title_bg=233
+        row_len=${indent}
+
+        autocomplete_print 'Custom:'
       fi
 
       (( row_len += dist + 1 ))
       if (( row_len > COLUMNS )); then
-        color=232
-        printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
-        printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" >&2
+        autocomplete_print
         (( row_len = indent + dist + 1 ))
       fi
 
@@ -332,7 +343,7 @@ bind -x '"\C-~":"bind_PS_refresher"'
 coproc BC {
   trap '' 2
 
-  bc -liq |&
+  bc -liq ${HOME_DIR}/lib/custom_functions.bc |&
     while IFS= read -r bc_output; do
       case "${bc_output}" in
         *interrupt*)

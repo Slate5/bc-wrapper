@@ -113,7 +113,7 @@ autocomplete() {
   local IFS=$'|\n\t'
 
   if (( BC_STATEMENTS_LVL > 0 )); then
-    declare -I COMPS_KEYWORDS+="|break|continue|halt|return "
+    declare -I COMPS_KEYWORDS+="|break|continue|halt|auto|return "
     COMPS_KEYWORDS="$(sed -E 's/\|?(warranty|limits)\|?/|/g' <<< "${COMPS_KEYWORDS}")"
   fi
 

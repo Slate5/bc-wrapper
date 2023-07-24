@@ -2,8 +2,8 @@
 Type=Application
 Name=BC
 Comment=A user-friendly BC wrapper
-Icon=bc_wrapper.svg
-Exec=env XDG_CONFIG_HOME=<TERM_CONFIG_PATH>/bc_wrapper xfce4-terminal -I <TERM_ICON_PATH>/bc_wrapper.svg --disable-server
+Icon=/usr/local/etc/bc_wrapper/bc_wrapper.svg
+Exec=env XDG_CONFIG_HOME=/usr/local/etc/bc_wrapper xfce4-terminal -I /usr/local/etc/bc_wrapper/bc_wrapper.svg --disable-server
 Categories=Utility;Education
 Keywords=Calculator;BC;Math
 Terminal=false

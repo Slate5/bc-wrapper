@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Check if the wrapper is installed
+if [ ! -e /usr/local/src/bc_wrapper/bc_wrapper.sh ]; then
+  printf '\033[1;31mFirst, install the wrapper using \033[3mmake\033[m\n' >&2
+  exit 1
+fi
+
 # Find bc binary command
 for bc_command in $(type -ap bc); do
   if grep -qI . ${bc_command}; then
@@ -30,7 +36,8 @@ elif [ -n "${1}" -o ! -t 1 ]; then
   exit
 fi
 
-HOME_DIR="$(dirname $(readlink -en $0))"
+# Installation stores functional files in this dir that the wrapper relies on
+LIB_DIR='/usr/local/lib/bc_wrapper'
 
 # Env var tells BC to not truncate output line length
 export BC_LINE_LENGTH=0
@@ -58,9 +65,9 @@ COMPS_LIB='length()|scale()|sqrt()|s()|c()|a()|l()|e()|j()'
 COMPS_CUSTOM="$(awk -F '[(= ]' '
                   /^[a-z]+ *=/ { printf "%s|", $1 }
                   /^define / { printf "%s()|", $2 }
-                ' ${HOME_DIR}/lib/custom_functions.bc)"
+                ' ${LIB_DIR}/custom_functions.bc)"
 
-HISTFILE=${HOME_DIR}/.bc_history
+HISTFILE=~/.bc_history
 HISTCONTROL='ignoredups:ignorespace'
 HISTSIZE=1000
 HISTFILESIZE=2000
@@ -80,13 +87,13 @@ bind_PS_refresher() {
 # Function used to trigger bind_PS_refresher(). Used when `read` removes
 # `printf`'s PS, e.g. SIGWINCH, autocomplete...
 refresh_read_cmd() {
-  ${HOME_DIR}/bin/write_to_STDIN 
+  ${LIB_DIR}/write_to_STDIN 
 }
 
 # When SIGINT is received, BC does not clean STDIN. This function
 # flushes STDIN and resets any nested statement.
 trap_SIGINT() {
-  ${HOME_DIR}/bin/write_to_STDIN 
+  ${LIB_DIR}/write_to_STDIN 
 
   if (( BC_STATEMENTS_LVL > 0 )); then
     unset INDENT
@@ -299,7 +306,7 @@ modify_list() {
           ascii_char_octal=$(printf -- '%s' "${answer}" | od -dA n)
 
           if (( ascii_char_octal > 31 && ascii_char_octal < 127 )); then
-            ${HOME_DIR}/bin/write_to_STDIN ${answer}
+            ${LIB_DIR}/write_to_STDIN ${answer}
           fi
         fi
 
@@ -343,7 +350,7 @@ bind -x '"\C-~":"bind_PS_refresher"'
 coproc BC {
   trap '' 2
 
-  bc -liq ${HOME_DIR}/lib/custom_functions.bc |&
+  bc -liq ${LIB_DIR}/custom_functions.bc |&
     while IFS= read -r bc_output; do
       case "${bc_output}" in
         *interrupt*)
@@ -401,7 +408,7 @@ coproc BC {
       refresh_read_cmd
     done
 
-  kill -0 $$ &>/dev/null && ${HOME_DIR}/bin/write_to_STDIN 
+  kill -0 $$ &>/dev/null && ${LIB_DIR}/write_to_STDIN 
 }
 
 PS_current="$(printf "${PS_READY}" ${LINE_NUM} | tee /dev/stderr)"

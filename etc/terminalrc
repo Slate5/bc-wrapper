@@ -1,5 +1,5 @@
 [Configuration]
-BackgroundImageFile=<BG_IMAGE_PATH>/bc_wrapper_bg.svg
+BackgroundImageFile=/usr/local/etc/bc_wrapper/bc_wrapper_bg.svg
 BackgroundImageShading=.8
 BackgroundImageStyle=TERMINAL_BACKGROUND_STYLE_FILLED
 BackgroundMode=TERMINAL_BACKGROUND_IMAGE

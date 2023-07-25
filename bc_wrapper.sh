@@ -619,7 +619,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         whole_statement+="${statement}"$'\n'
       fi
 
-    elif [[ "${statement}" =~ ^\ *[a-z0-9_]+(\[.+\])?\ *=[^=] ]]; then
+    elif [[ "${statement}" =~ ^\ *[a-z0-9_]+(\[.+\])?\ *[%^*/+-]?=[^=] ]]; then
       input_type=$'/* \255 */'
 
     fi

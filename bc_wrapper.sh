@@ -58,13 +58,13 @@ PS_SIGN='>'
 PS_BUSY=$'\033[G\033[1;33mBC\033[m:%02d%s '
 
 # Autocomplete statements, separated into 4 classes
-COMPS_STATEMENTS='define f() {|if () {|while () {|for (i=0; i<; ++i) {'
+COMPS_STATEMENTS='define fun() {|if () {|while () {|for (i=0; i<; ++i) {'
 COMPS_KEYWORDS='print \"\"|last|history|warranty|limits|\$|\$\$|quit'
 COMPS_VAR='scale = |base = |ibase = |obase = '
-COMPS_LIB='length()|scale()|sqrt()|s()|c()|a()|l()|e()|j()'
-COMPS_CUSTOM="$(awk -F '[(= ]' '
-                  /^[a-z]+ *=/ { printf "%s|", $1 }
-                  /^define / { printf "%s()|", $2 }
+COMPS_STD='length(expr)|scale(expr)|sqrt(expr)|s(rad)|c(rad)|a(input)|l(arg)|e(exp)|j(order, arg)'
+COMPS_EXT="$(awk -F '(^define *| *=|\\))' '
+                  /^[a-z]+ *=[^=]/ { printf "%s|", $1 }
+                  /^define / { printf "%s)|", $2 }
                 ' ${LIB_DIR}/custom_functions.bc)"
 
 HISTFILE=~/.bc_history
@@ -136,12 +136,13 @@ autocomplete() {
     COMPS_KEYWORDS="$(sed -E 's/\|?(warranty|limits)\|?/|/g' <<< "${COMPS_KEYWORDS}")"
   fi
 
-  local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_LIB}|${COMPS_CUSTOM}"
+  local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_STD}|${COMPS_EXT}"
   local trim_indent_line="${READLINE_LINE#${READLINE_LINE%%[![:space:]]*}}"
   local comps
   local i dist=0 indent=12
-  local max_cols_st max_cols_kw max_cols_var max_cols_lib max_cols_cus max_cols
-  local comp row_len color bg title_bg st_done kw_done var_done lib_done cus_done
+  local max_cols_st max_cols_kw max_cols_var max_cols_std max_cols_ext max_cols
+  local comp row_len color bg title_bg st_done kw_done var_done std_done ext_done
+  local common_substring
   local position_part
 
   refresh_read_cmd
@@ -164,14 +165,14 @@ autocomplete() {
         (( max_cols_kw += dist + 1 ))
       elif [[ "|${COMPS_VAR//\\}|" == *"|${i}|"* ]]; then
         (( max_cols_var += dist + 1 ))
-      elif [[ "|${COMPS_LIB//\\}|" == *"|${i}|"* ]]; then
-        (( max_cols_lib += dist + 1 ))
-      elif [[ "|${COMPS_CUSTOM//\\}|" == *"|${i}|"* ]]; then
-        (( max_cols_cus += dist + 1 ))
+      elif [[ "|${COMPS_STD//\\}|" == *"|${i}|"* ]]; then
+        (( max_cols_std += dist + 1 ))
+      elif [[ "|${COMPS_EXT//\\}|" == *"|${i}|"* ]]; then
+        (( max_cols_ext += dist + 1 ))
       fi
     done
 
-    max_cols=$(printf "${max_cols_st}\n${max_cols_kw}\n${max_cols_var}\n${max_cols_lib}\n${max_cols_cus}" | sort -n | tail -n 1)
+    max_cols=$(printf "${max_cols_st}\n${max_cols_kw}\n${max_cols_var}\n${max_cols_std}\n${max_cols_ext}" | sort -n | tail -n 1)
 
     (( max_cols += indent ))
 
@@ -201,20 +202,20 @@ autocomplete() {
         row_len=${indent}
 
         autocomplete_print 'Variables:'
-      elif [[ -z "${lib_done}" && "|${COMPS_LIB//\\}|" == *"|${comp}|"* ]]; then
-        lib_done=yes
+      elif [[ -z "${std_done}" && "|${COMPS_STD//\\}|" == *"|${comp}|"* ]]; then
+        std_done=yes
         bg=241
         title_bg=234
         row_len=${indent}
 
-        autocomplete_print 'Library:'
-      elif [[ -z "${cus_done}" && "|${COMPS_CUSTOM//\\}|" == *"|${comp}|"* ]]; then
-        cus_done=yes
+        autocomplete_print 'Std Lib:'
+      elif [[ -z "${ext_done}" && "|${COMPS_EXT//\\}|" == *"|${comp}|"* ]]; then
+        ext_done=yes
         bg=242
         title_bg=233
         row_len=${indent}
 
-        autocomplete_print 'Custom:'
+        autocomplete_print 'Extras:'
       fi
 
       (( row_len += dist + 1 ))
@@ -229,15 +230,24 @@ autocomplete() {
     done
 
     echo
+    common_substring="$(printf "%s\n" "${comps[@]}" | sed -e '$!{N;s/^\(.*\).*\n\1.*$/\1\n\1/;D;}')"
+    READLINE_LINE="${READLINE_LINE%%${common_substring:0:1}*}${common_substring}"
+    READLINE_POINT="${#READLINE_LINE}"
+
   else
-    READLINE_LINE="${READLINE_LINE%%${comps[0]:0:1}*}${comps[0]}"
+    if [[ "${comps[0]}" == *\) ]]; then
+      READLINE_LINE="${READLINE_LINE%%${comps[0]:0:1}*}${comps[0]/(*)/()}"
+    else
+      READLINE_LINE="${READLINE_LINE%%${comps[0]:0:1}*}${comps[0]}"
+    fi
 
     case "${comps[0]}" in
-      for\ \(*) position_part="${READLINE_LINE%%; ++i*}" ;;
+      for\ \(*++i*) position_part="${READLINE_LINE%%; ++i*}" ;;
       *\(*\)*) position_part="${READLINE_LINE%%\)*}" ;;
       print\ *) position_part="${READLINE_LINE%\"*}" ;;
       *) position_part="${READLINE_LINE}" ;;
     esac
+
     READLINE_POINT="${#position_part}"
   fi
 }

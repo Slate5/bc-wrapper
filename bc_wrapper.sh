@@ -16,9 +16,15 @@ for bc_command in $(type -ap bc); do
   fi
 done
 
+# Exit wrapper if command doesn't exist or replace it with real
+# BC when STDIN/STDOUT is not tty or when flag is being used
 if [[ -z "${bc_command}" ]]; then
   printf '\033[1;3;31mbc\033[23m not found\033[m\n' >&2
   exit 1
+elif [ ! -t 0 ]; then
+  exec ${bc_command} ${@} < <(cat)
+elif [ -n "${1}" -o ! -t 1 ]; then
+  exec ${bc_command} ${@}
 fi
 
 # Overriding bc command to avoid recursion when this
@@ -26,15 +32,6 @@ fi
 bc() {
   ${bc_command} ${@}
 }
-
-# Gives a user real BC when STDIN/STDOUT is not tty or when flag is being used
-if [ ! -t 0 ]; then
-  cat | bc ${@}
-  exit
-elif [ -n "${1}" -o ! -t 1 ]; then
-  bc ${@}
-  exit
-fi
 
 # Installation stores functional files in this dir that the wrapper relies on
 LIB_DIR='/usr/local/lib/bc_wrapper'

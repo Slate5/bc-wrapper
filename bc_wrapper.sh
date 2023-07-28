@@ -117,6 +117,11 @@ trap_EXIT() {
   done
 }
 
+fix_err_line_num_and_print() {
+  local line_num_fixed="$(sed "s/ [0-9]*: / $(( LINE_NUM - 1 )): /" <<< "${1}")"
+  printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${line_num_fixed}" >&2
+}
+
 # Helper function for autocomplete(), helpless attempt to make this wet script DRY...
 autocomplete_print() {
   color=232
@@ -369,7 +374,7 @@ coproc BC {
           printf '\033[G\033[0K\033[1;33m%s\033[m\n' "${bc_output}" >&2
           ;;
         *standard_in*|*error*)
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${bc_output}" >&2
+          fix_err_line_num_and_print "${bc_output}"
           ;;
         *warning*)
           printf '\033[G\033[0K\033[1;35m%s\033[m\n' "${bc_output}" >&2
@@ -483,7 +488,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
 
       if (( $? != 0 )); then
         if [[ -n "${statement}" ]]; then
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${statement}" >&2
+          fix_err_line_num_and_print "${statement}"
         else
           printf '\033[G\033[0K\033[1;31mNon-zero exit code received.\033[m\n'
         fi
@@ -557,7 +562,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
 
       test_output="$(bc -lq <<< "${test_input}" |& grep 'standard_in')"
       if (( $? == 0 )); then
-        printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_output}" >&2
+        fix_err_line_num_and_print "${test_output}"
 
         ignore_input_BC
       else
@@ -587,7 +592,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       if (( BC_STATEMENTS_LVL > 0 )); then
         test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
         if (( $? == 0 )); then
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_output}" >&2
+          fix_err_line_num_and_print "${test_output}"
 
           statement='{}'
         else
@@ -604,7 +609,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       if (( BC_STATEMENTS_LVL > 0 )); then
         test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
         if (( $? == 0 )); then
-          printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_output}" >&2
+          fix_err_line_num_and_print "${test_output}"
 
           statement='/* ignore */'
         else

@@ -452,7 +452,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     input="${input_list}"
     unset input_list
     IFS=$'\n'
-  elif [[ "${input}" =~ ^[[:space:]]*for[[:space:]]*\( ]]; then
+  elif [[ "${input}" =~ (^|[[:space:]]+)for[[:space:]]*\(.*\; ]]; then
     IFS=$'\n'
   else
     IFS=$';\n'
@@ -569,62 +569,57 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         unset oneliner_statement
         whole_statement+="${statement}"$'\n'
 
-        for (( i = 0; i < opening_braces_num; ++i )); do
-          (( BC_STATEMENTS_LVL++ ))
-          INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
+        (( BC_STATEMENTS_LVL += opening_braces_num - closing_braces_num ))
+
+        if (( BC_STATEMENTS_LVL > 0 )); then
           PS_SIGN=$'\033[31m{\033[m'
-        done
+          INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
+        elif [[ "${statement}" =~ \}\ *else\ * ]]; then
+          oneliner_statement=possible
+          unset INDENT
+        else
+          PS_SIGN='>'
+          unset INDENT
+          unset whole_statement
 
-        for (( i = 0; i < closing_braces_num; ++i )); do
-          if (( --BC_STATEMENTS_LVL > 0 )); then
-            INDENT="-i$(printf "%$(( BC_STATEMENTS_LVL * 2 ))s")"
-          else
-            PS_SIGN='>'
-            unset INDENT
-            unset whole_statement
-
-            statement+=$'; print "/* \255 */#'"${LINE_NUM}\n\""
-          fi
-        done
+          statement+=$'; print "/* \255 */#'"${LINE_NUM}\n\""
+        fi
       fi
 
-    elif [[ -n "${oneliner_statement}" ]]; then
-      if (( BC_STATEMENTS_LVL > 0 )); then
-        test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
-        if (( $? == 0 )); then
-          fix_err_line_num_and_print "${test_output}"
+    elif [[ "${statement}" =~ ^\ *((if|while|for)\ *\([^\)]*\)\ *)+$ ]]; then
+      test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
+      if (( $? == 0 )); then
+        fix_err_line_num_and_print "${test_output}"
 
-          statement='{}'
-        else
-          whole_statement+="${statement}"$'\n'
-        fi
+        statement='/* ignore */'
+      else
+        whole_statement+="${statement}"$'\n'
+        oneliner_statement=possible
+        PS_SIGN=$'\033[31m{\033[m'
+      fi
+
+    elif [[ -n "${oneliner_statement}" || "${statement}" =~ ^\ *(if|while|for)\ *\( ]]; then
+      test_output="$(bc -lq <<< "${whole_statement}${statement}; quit" |& grep 'standard_in')"
+      if (( $? == 0 )); then
+        fix_err_line_num_and_print "${test_output}"
+
+        PS_current="$(printf "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+        (( LINE_NUM-- ))
+        continue 2
+      elif (( BC_STATEMENTS_LVL > 0 )); then
+        whole_statement+="${statement}"$'\n'
       else
         PS_SIGN='>'
+        unset whole_statement
         statement+=$'; print "/* \255 */#'"${LINE_NUM}\n\""
       fi
 
       unset oneliner_statement
 
-    elif [[ "${statement}" =~ ^\ *(if|while|for)\ *\(.* ]]; then
-      if (( BC_STATEMENTS_LVL > 0 )); then
-        test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
-        if (( $? == 0 )); then
-          fix_err_line_num_and_print "${test_output}"
-
-          statement='/* ignore */'
-        else
-          whole_statement+="${statement}"$'\n'
-          oneliner_statement=possible
-        fi
-      else
-        oneliner_statement=possible
-        PS_SIGN=$'\033[31m{\033[m'
-      fi
-
     elif (( BC_STATEMENTS_LVL > 0 )); then
       test_output="$(bc -lq <<< "${whole_statement}${statement}"$'\nquit' |& grep 'standard_in')"
       if (( $? == 0 )); then
-        printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${test_output}" >&2
+        fix_err_line_num_and_print "${test_output}"
 
         statement='/* ignore */'
       else

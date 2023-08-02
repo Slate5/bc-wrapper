@@ -6,7 +6,7 @@ SHELL := /bin/bash
 repo_dir := $(abspath $(dir $(MAKEFILE_LIST)))
 install_dir := $(shell grep -Po '^.*?\K/home/$(USER)[^:]*' <<< $(PATH) || echo /usr/local/bin)
 
-install:
+install: _check_permission
 	$(info Installing...)
 ifneq ($(wildcard /usr/local/src/bc_wrapper/bc_wrapper.sh),)
 	@printf '\033[1;35mPrevious installation detected!\033[m\n'
@@ -34,7 +34,7 @@ endif
 	@printf '\033[1;35mInstallation finished. If \033[3mbc\033[23m is not updated, '
 	@printf 'restart the shell or check:\n\033[mupdate-alternatives --display bc\n'
 
-remove:
+remove: _check_permission
 	@printf 'Removing... '
 	@update-alternatives --quiet --remove bc /usr/local/src/bc_wrapper/bc_wrapper.sh
 	@rm -rf /usr/local/src/bc_wrapper /usr/local/lib/bc_wrapper
@@ -44,4 +44,10 @@ ifeq ($(shell command -v xfce4-terminal &>/dev/null),)
 	@rm -f /usr/share/applications/bc_wrapper.desktop
 endif
 	@echo Done
+
+_check_permission:
+	@if [ ! -w /usr/local/bin ]; then \
+		printf "\033[1;31mPermission denied\033[m\n"; \
+		exit 4; \
+	fi
 

@@ -543,7 +543,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         printf '\033[G\033[0K\033[1;35mWarning: Bash output ' >&2
         printf "goes into BC's input automatically.\033[0m\n" >&2
       fi
-    elif [[ "${statement}" =~ \ *print( *\".*\"| +[a-z]) ]]; then
+    elif [[ "${statement}" =~ \ *print( *\".*\"| +.+) ]]; then
       statement="$(sed -E 's/print(.*,)? *(".*"|[^ ;]+)/&, "\\n"/' <<< "${statement}")"
 
     elif [[ "${statement}" =~ ^\ *(warranty|limits)\ *$ ]]; then

@@ -53,6 +53,9 @@ PS_DUMMY=$'\033[G\033['"${SATISFY_PS_DUMMY_LEN}${PS_LEN}C"
 PS_READY=$'\033[G\033[1;32mBC\033[m:%02d> '
 PS_SIGN='>'
 PS_BUSY=$'\033[G\033[1;33mBC\033[m:%02d%s '
+PS_READ_INPUT=$'\033[G\033[1;2;33mIN\033[0;2m:%02d\033[5;31m%s\033[m '
+STATEMENT_DONE_TRIGGER_MSG=$'/* \255 */#STATEMENT DONE'
+STATEMENT_DONE_TRIGGER="; print \"${STATEMENT_DONE_TRIGGER_MSG}\\n\""
 
 # Autocomplete statements, separated into 4 classes
 COMPS_STATEMENTS='define fun() {|if () {|while () {|for (i=0; i<; ++i) {'
@@ -63,6 +66,12 @@ COMPS_EXT="$(awk -F '(^define *| *=|\\))' '
                   /^[a-z]+ *=[^=]/ { printf "%s|", $1 }
                   /^define / { printf "%s)|", $2 }
                 ' ${LIB_DIR}/custom_functions.bc)"
+
+FUNCTIONS_WITH_READ="read$(awk -F '[( ]' '
+                            /^define / { tmp = $2 }
+                            /[=	 ]+read *\(\)/ { functions = functions"|"tmp }
+                          END { print functions }
+                          ' ${LIB_DIR}/custom_functions.bc)"
 
 HISTFILE=~/.bc_history
 HISTCONTROL='ignoredups:ignorespace'
@@ -366,6 +375,10 @@ coproc BC {
     while IFS= read -r bc_output; do
       case "${bc_output}" in
         *interrupt*)
+          if [[ -n "${postpone_PS_READY}" ]]; then
+            unset postpone_PS_READY
+          fi
+
           if [[ -n "${statement_interrupted}" ]]; then
             unset statement_interrupted
             continue
@@ -390,17 +403,34 @@ coproc BC {
             kill -s 2 0
           fi
 
+          # When some statement has iterative calculations, this prevents PS_READY
+          # to appear after the first successful calculation. It waits until the
+          # statement is done, e.g. for (i=0; i<10; ++i) 2^222222. Also, it is
+          # needed when BC's read() is inside the iterator to keep PS_READ_INPUT.
+          if [[ "${bc_output}" == *"${STATEMENT_DONE_TRIGGER}"* ]]; then
+            postpone_PS_READY=true
+          fi
+
           continue
           ;;
         *$'/* \255 */#'*) # Type of input that should print green PS, e.g. a = 2
-          (( LINE_NUM = $(grep -o '^[0-9]*' <<< ${bc_output##*#}) ))
+          if [[ -n "${postpone_PS_READY}" ]]; then
+            if [[ "${bc_output}" == "${STATEMENT_DONE_TRIGGER_MSG}" ]]; then
+              unset postpone_PS_READY
+            else
+              continue
+            fi
+          else
+            (( LINE_NUM = $(grep -o '^[0-9]*' <<< ${bc_output##*#}) ))
 
-          if [[ "${bc_output}" =~ ^\ *(warranty|limits)\ +/\*\  ]]; then
-            while read -t 0; do
-              IFS= read -r line
-              printf '\033[G\033[0K%s\n' "${line}" >&2
-            done
+            if [[ "${bc_output}" =~ ^\ *(warranty|limits)\ +/\*\  ]]; then
+              while read -t 0; do
+                IFS= read -r line
+                printf '\033[G\033[0K%s\n' "${line}" >&2
+              done
+            fi
           fi
+
           ;;
         *?*)
           printf '\033[G\033[0K\033[1;35m=>\033[39m %s\033[m\n' "${bc_output}" >&2
@@ -415,8 +445,10 @@ coproc BC {
           ;;
       esac
 
-      printf "${PS_READY}\n" ${LINE_NUM}
-      printf "${PS_READY}" ${LINE_NUM} >&2
+      if [[ -z "${postpone_PS_READY}" ]]; then
+        printf "${PS_READY}\n" ${LINE_NUM}
+        printf "${PS_READY}" ${LINE_NUM} >&2
+      fi
       refresh_read_cmd
     done
 
@@ -426,7 +458,15 @@ coproc BC {
 PS_current="$(printf "${PS_READY}" ${LINE_NUM} | tee /dev/stderr)"
 
 while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
-  if read -t 0; then
+  if [[ "${countdown_to_feed_BC_read}" == 0 ]]; then
+    refresh_read_cmd
+    if [[ "${PS_current}" != *'IN'* ]]; then
+      unset countdown_to_feed_BC_read
+    else
+      echo "${input}" >&${BC[1]}
+      continue
+    fi
+  elif read -t 0; then
     create_list && modify_list
 
     if [[ -z "${input_list}" ]]; then
@@ -582,7 +622,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
           unset INDENT
           unset whole_statement
 
-          statement+=$'; print "/* \255 */#'"${LINE_NUM}\n\""
+          statement+="${STATEMENT_DONE_TRIGGER}"
         fi
       fi
 
@@ -611,7 +651,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       else
         PS_SIGN='>'
         unset whole_statement
-        statement+=$'; print "/* \255 */#'"${LINE_NUM}\n\""
+        statement+="${STATEMENT_DONE_TRIGGER}"
       fi
 
       unset oneliner_statement
@@ -631,7 +671,29 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
 
     fi
 
-    PS_current="$(printf "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+    # BC's read() is quirky at processing input, buffering, etc. This block of code tries to
+    # mimic the same weird and confusing behavior (if not even surpass it) of GNU BC's read().
+    if (( countdown_to_feed_BC_read > 0 && BC_STATEMENTS_LVL == 0 )); then
+      (( countdown_to_feed_BC_read-- ))
+      PS_current="$(printf "${PS_READ_INPUT}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+    elif [[ "${statement}" != *'define '* && "${statement}" =~ (^|[= ])(${FUNCTIONS_WITH_READ})\ *\( ]]; then
+      if (( BC_STATEMENTS_LVL > 0 )); then
+        new_function_with_read="$(grep -Po '^ *define +\K[^( ]+' <<< "${whole_statement}")"
+        if (( $? == 0 )); then
+          FUNCTIONS_WITH_READ+="|${new_function_with_read}"
+        else
+          countdown_to_feed_BC_read=1
+        fi
+        PS_current="$(printf "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+      else
+        statement+="${STATEMENT_DONE_TRIGGER}"
+        PS_current="$(printf "${PS_READ_INPUT}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+        countdown_to_feed_BC_read=0
+        input_type=$'/* \254 */'
+      fi
+    else
+      PS_current="$(printf "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+    fi
 
     # Feeding BC with the user's input
     echo "${statement} ${input_type}#${LINE_NUM}" >&${BC[1]}

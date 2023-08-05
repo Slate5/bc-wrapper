@@ -356,8 +356,8 @@ history -r
 set -o emacs
 bind 'set enable-bracketed-paste off'
 for fun in reverse-search-history forward-search-history possible-filename-completions\
-           possible-hostname-completions possible-username-completions\
-           possible-variable-completions possible-completions\
+           possible-hostname-completions possible-username-completions clear-screen\
+           possible-variable-completions possible-completions clear-display\
            possible-command-completions insert-completions glob-list-expansions\
            glob-complete-word edit-and-execute-command dynamic-complete-history\
            display-shell-version complete-command complete-filename complete-hostname\
@@ -367,6 +367,8 @@ do
 done
 bind -x '"\C-i":"autocomplete"'
 bind -x '"\C-~":"bind_PS_refresher"'
+bind -x '"\C-l":"clear -x; refresh_read_cmd"'
+bind -x '"\e\C-l":"clear; refresh_read_cmd"'
 
 coproc BC {
   trap '' 2

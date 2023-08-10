@@ -41,6 +41,8 @@ export BC_LINE_LENGTH=0
 
 BC_BASE=10
 LINE_NUM=1
+CONCURRENT_INPUT=1
+SPINNER='━╲┃╱'
 SATISFY_PS_DUMMY_LEN=''
 PS_LEN=7
 # `read` used for interaction with the user is fed with this PS_DUMMY to mimic
@@ -58,11 +60,11 @@ PS_CURRENT=''
 STATEMENT_DONE_TRIGGER_MSG=$'/* \255 */#STATEMENT DONE'
 STATEMENT_DONE_TRIGGER="; print \"${STATEMENT_DONE_TRIGGER_MSG}\\n\""
 
-# Autocomplete statements, separated into 4 classes
+# Autocomplete statements, separated into several categories
 COMPS_STATEMENTS='define fun() {|if () {|while () {|for (i=0; i<; ++i) {'
 COMPS_KEYWORDS='print \"\"|last|history|warranty|limits|\$|\$\$|quit'
-COMPS_VAR='scale = |base = |ibase = |obase = '
 COMPS_STD='length(expr)|scale(expr)|sqrt(expr)|s(rad)|c(rad)|a(input)|l(arg)|e(exp)|j(order, arg)'
+COMPS_VAR='scale = |base = |ibase = |obase = |concurrent_input = '
 COMPS_EXT="$(awk -F '(^define *| *=|\\))' '
                   /^[a-z]+ *=[^=]/ { printf "%s|", $1 }
                   /^define / { printf "%s)|", $2 }
@@ -466,6 +468,7 @@ coproc BC {
 
 # Feed BC with wrapper's special variables in case user wants to check values.
 echo "base = ${BC_BASE}"$' /* \254 */#'"${LINE_NUM}" >&${BC[1]}
+echo "concurrent_input = ${CONCURRENT_INPUT}"$' /* \254 */#'"${LINE_NUM}" >&${BC[1]}
 
 assign_and_print_PS_CURRENT "${PS_READY}" ${LINE_NUM}
 
@@ -555,6 +558,16 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       else
         printf '\033[G\033[0K\033[1;35mWarning: Bash output ' >&2
         printf "goes into BC's input automatically.\033[0m\n" >&2
+      fi
+    elif [[ "${statement}" =~ ^\ *concurrent_input\ *=\ *([^=; ]+) ]]; then
+      if [[ "${BASH_REMATCH[1]}" == [01] ]]; then
+        concurrent_input=${BASH_REMATCH[1]}
+        CONCURRENT_INPUT=${concurrent_input}
+      else
+        printf '\033[G\033[0K\033[1;35mWarning: Special variable ' >&2
+        printf 'accepts 1 or 0 to switch concurrent input on/off.\n' >&2
+
+        ignore_input_BC
       fi
     elif [[ "${statement}" =~ \ *print( *\".*\"| +.+) ]]; then
       statement="$(sed -E 's/print(.*,)? *(".*"|[^ ;]+)/&, "\\n"/' <<< "${statement}")"
@@ -711,6 +724,22 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     # Feeding BC with the user's input
     echo "${statement} ${input_type}#${LINE_NUM}" >&${BC[1]}
 
+    if (( CONCURRENT_INPUT + BC_STATEMENTS_LVL == 0 )) && [ -z "${countdown_to_feed_BC_read}" ]; then
+      printf '\033[?25l\033[1;33m'
+
+      while :; do sleep 0.12; printf "${SPINNER:i++%4:1}\033[D"; done &
+      spinner_pid=$(jobs -p %)
+
+      while read -srn 1 calc_finished; do
+        if [[ "${calc_finished}" == $'\036' ]]; then
+          refresh_PS_CURRENT
+          break
+        fi
+      done
+
+      kill ${spinner_pid}
+      printf '\033[?25h\033[m'
+    fi
   done
 done
 

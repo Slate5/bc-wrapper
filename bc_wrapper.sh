@@ -275,25 +275,19 @@ autocomplete() {
 
 create_list() {
   local list_line
-  [[ "${input}" =~ ^[[:space:]]*$ ]] || input_list="${input};"
+  [[ "${input}" =~ ^[[:space:]]*$ ]] || input_list="${input}"$'\n'
 
   while :; do
     IFS= read -ser list_line
-    [[ "${list_line}" =~ ^[[:space:]]*$ ]] || input_list+="${list_line};"
+    [[ "${list_line}" =~ ^[[:space:]]*$ ]] || input_list+="${list_line}"$'\n'
 
     read -t 0 || break
   done
 
-  if [[ -n "${input_list}" ]]; then
-    input_list="${input_list:0:-1}"
-    return 0
-  else
-    printf '\033[G\033[0K\033[35mEmpty list detected...\033[m\n' >&2
-    return 1
-  fi
+  input_list="${input_list:0:-1}"
 }
 
-modify_list() {
+modify_list_of_num() {
   local answer ascii_char_octal
 
   local PS_opts='Available options [+-*/aosdq]: [ ]'
@@ -305,15 +299,15 @@ modify_list() {
 
   stty -echo
 
-  printf '\033[?25l\033[G\033[0KList detected: %s\n\n' "${input_list//;/, }"
+  printf '\033[?25l\033[G\033[0KList detected: %s\n\n' "${input_list//$'\n'/, }"
 
   while IFS= read -srN 1 -p "${PS}" answer; do
     case "${answer}" in
-      [+\-/*]) input_list="${input_list//;/${answer}}" ;;
-      a) input_list="(${input_list//;/+}) / $(wc -c <<< "${input_list//[^;]}")" ;;
-      o) : ;;
-      s) input_list="$(sort -n <<< "${input_list//;/$'\n'}" | tr '\n' ';')" ;;
-      d) input_list="$(sort -rn <<< "${input_list//;/$'\n'}" | tr '\n' ';')" ;;
+      [+\-/*]) input_list="${input_list//$'\n'/${answer}}" ;;
+      a) input_list="(${input_list//$'\n'/+}) / ${input_list_line_num}" ;;
+      o) input_list="${input_list//$'\n'/;}" ;;
+      s) input_list="$(sort -n <<< "${input_list}" | tr '\n' ';')" ;;
+      d) input_list="$(sort -rn <<< "${input_list}" | tr '\n' ';')" ;;
       q) unset input_list ;;
       []) # Caught when SIGINT received, thanks to trap_SIGINT
         unset input_list
@@ -485,11 +479,22 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       continue
     fi
   elif read -t 0; then
-    create_list && modify_list
+    create_list
 
-    if [[ -z "${input_list}" ]]; then
-      refresh_read_cmd
-      continue
+    input_list_line_num="$(wc -l <<< "${input_list}")"
+
+    if (( input_list_line_num < 2 )); then
+      unset input_list
+    elif [[ "${input_list//$'\n'}" == *[^0-9]* ]]; then
+      CONCURRENT_INPUT=0
+      input_list_counter=0
+    else
+      modify_list_of_num
+
+      if [[ -z "${input_list}" ]]; then
+        printf '%s' "${PS_CURRENT}" >&2
+        continue
+      fi
     fi
 
   else
@@ -515,6 +520,18 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
   fi
 
   for statement in ${input}; do
+    if [ -n "${input_list_counter}" ] && (( input_list_counter++ > 0 )); then
+      history -s -- "${statement}"
+      (( LINE_NUM++ ))
+
+      printf '%s\n' "${statement}"
+
+      if (( input_list_counter == input_list_line_num )); then
+        unset input_list_counter
+        CONCURRENT_INPUT="${concurrent_input:-1}"
+      fi
+    fi
+
     statement="${statement//$'\t'/ }"
     input_type=$'/* \254 */'
 

@@ -50,10 +50,11 @@ PS_LEN=7
 # miscalculate its length because of the terminal VT100 escape code.
 # Manic users need all the support they can get... 🐼
 PS_DUMMY=$'\033[G\033['"${SATISFY_PS_DUMMY_LEN}${PS_LEN}C"
-PS_READY=$'\033[G\033[1;32mBC\033[m:%02d> '
+PS_READY=$'\033[G\033[0K\033[1;32mBC\033[m:%02d> '
 PS_SIGN='>'
-PS_BUSY=$'\033[G\033[1;33mBC\033[m:%02d%s '
-PS_READ_INPUT=$'\033[G\033[1;2;33mIN\033[0;2m:%02d\033[5;31m%s\033[m '
+PS_BUSY=$'\033[G\033[0K\033[1;33mBC\033[m:%02d%s '
+PS_READ_INPUT=$'\033[G\033[0K\033[1;2;33mIN\033[0;2m:%02d\033[5;31m%s\033[m '
+PS_CURRENT=''
 STATEMENT_DONE_TRIGGER_MSG=$'/* \255 */#STATEMENT DONE'
 STATEMENT_DONE_TRIGGER="; print \"${STATEMENT_DONE_TRIGGER_MSG}\\n\""
 
@@ -79,20 +80,27 @@ HISTSIZE=1000
 HISTFILESIZE=2000
 HISTTIMEFORMAT=$'\033[1;31m%T\033[33m %d/%m/%y ⮕\033[39m  '
 
-# Called by `readline` when <ALT><V> send to `read`. It checks which PS is used
-# last (PS_READY or PS_BUSY). This is a way to find out if background `coproc`
-# BC finished a task (e.g. long calculation).
-bind_PS_refresher() {
-  while read -t 0 -u ${BC[0]}; do
-    IFS= read -ru ${BC[0]} PS_current
-  done
-
-  printf '%s' "${PS_current}"
+assign_and_print_PS_CURRENT() {
+  PS_CURRENT="$(printf "${@}")"
+  printf '%s' "${PS_CURRENT}" >&2
 }
 
-# Function used to trigger bind_PS_refresher(). Used when `read` removes
-# `printf`'s PS, e.g. SIGWINCH, autocomplete...
-refresh_read_cmd() {
+# Called indirectly by "readline" when <CTRL><~> is sent to `read -e` (or more
+# precisely, when refresh_PS_CURRENT_using_read() is executed). Then it assigns
+# the PS_READY to ${PS_CURRENT} if `coproc BC` finished a given task.
+# Making this mess came from the need to synchronize `coproc BC` with the main shell.
+refresh_PS_CURRENT() {
+  while read -t 0 -u ${BC[0]}; do
+    IFS= read -ru ${BC[0]} PS_CURRENT
+  done
+
+  printf '%s' "${PS_CURRENT}" >&2
+}
+
+# This triggers refresh_PS_CURRENT(). Used when `read` removes `printf`'s PS
+# (PS_READY, PS_BUSY, etc) on SIGWINCH received, on autocomplete, and primarily when
+# `coproc BC` finishes a task so that ${PS_CURRENT} can be updated in the main shell.
+refresh_PS_CURRENT_using_read() {
   ${LIB_DIR}/write_to_STDIN 
 }
 
@@ -347,7 +355,7 @@ ignore_input_BC() {
   (( BC_STATEMENTS_LVL == 0 )) && input_type=$'/* \255 */'
 }
 
-trap refresh_read_cmd 28
+trap refresh_PS_CURRENT_using_read 28
 trap trap_SIGINT 2
 trap trap_EXIT 0
 
@@ -366,9 +374,9 @@ do
   bind -u ${fun}
 done
 bind -x '"\C-i":"autocomplete"'
-bind -x '"\C-~":"bind_PS_refresher"'
-bind -x '"\C-l":"clear -x; refresh_read_cmd"'
-bind -x '"\e\C-l":"clear; refresh_read_cmd"'
+bind -x '"\C-~":"refresh_PS_CURRENT"'
+bind -x '"\C-l":"clear -x; refresh_PS_CURRENT_using_read"'
+bind -x '"\e\C-l":"clear; refresh_PS_CURRENT_using_read"'
 
 coproc BC {
   trap '' 2
@@ -449,20 +457,25 @@ coproc BC {
 
       if [[ -z "${postpone_PS_READY}" ]]; then
         printf "${PS_READY}\n" ${LINE_NUM}
-        printf "${PS_READY}" ${LINE_NUM} >&2
       fi
-      refresh_read_cmd
+      refresh_PS_CURRENT_using_read
     done
 
   kill -0 $$ &>/dev/null && ${LIB_DIR}/write_to_STDIN 
 }
 
-PS_current="$(printf "${PS_READY}" ${LINE_NUM} | tee /dev/stderr)"
+# Feed BC with wrapper's special variables in case user wants to check values.
+echo "base = ${BC_BASE}"$' /* \254 */#'"${LINE_NUM}" >&${BC[1]}
+
+assign_and_print_PS_CURRENT "${PS_READY}" ${LINE_NUM}
 
 while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
-  if [[ "${countdown_to_feed_BC_read}" == 0 ]]; then
-    refresh_read_cmd
-    if [[ "${PS_current}" != *'IN'* ]]; then
+  if [[ "${input//;}" =~ ^[[:space:]]*$ ]]; then
+    printf '%s' "${PS_CURRENT}" >&2
+    continue
+  elif [[ "${countdown_to_feed_BC_read}" == 0 ]]; then
+    refresh_PS_CURRENT
+    if [[ "${PS_CURRENT}" != *'IN'* ]]; then
       unset countdown_to_feed_BC_read
     else
       echo "${input}" >&${BC[1]}
@@ -475,9 +488,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       refresh_read_cmd
       continue
     fi
-  elif [[ "${input//;}" =~ ^[[:space:]]*$ ]]; then
-    refresh_read_cmd
-    continue
+
   else
     history -s -- "${input}"
   fi
@@ -570,7 +581,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
 
       case "${BASH_REMATCH[2]}" in
         base)
-          statement="base=${input_base};obase=${adjusted_base};ibase=${adjusted_base}"
+          statement="base=${adjusted_base};obase=${adjusted_base};ibase=${adjusted_base}"
           BC_BASE="${input_base}"
           ;;
         ibase)
@@ -645,7 +656,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       if (( $? == 0 )); then
         fix_err_line_num_and_print "${test_output}"
 
-        PS_current="$(printf "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+        assign_and_print_PS_CURRENT "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}"
         (( LINE_NUM-- ))
         continue 2
       elif (( BC_STATEMENTS_LVL > 0 )); then
@@ -677,7 +688,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     # mimic the same weird and confusing behavior (if not even surpass it) of GNU BC's read().
     if (( countdown_to_feed_BC_read > 0 && BC_STATEMENTS_LVL == 0 )); then
       (( countdown_to_feed_BC_read-- ))
-      PS_current="$(printf "${PS_READ_INPUT}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+      assign_and_print_PS_CURRENT "${PS_READ_INPUT}" ${LINE_NUM} "${PS_SIGN}"
     elif [[ "${statement}" != *'define '* && "${statement}" =~ (^|[= ])(${FUNCTIONS_WITH_READ})\ *\( ]]; then
       if (( BC_STATEMENTS_LVL > 0 )); then
         new_function_with_read="$(grep -Po '^ *define +\K[^( ]+' <<< "${whole_statement}")"
@@ -686,15 +697,15 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         else
           countdown_to_feed_BC_read=1
         fi
-        PS_current="$(printf "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+        assign_and_print_PS_CURRENT "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}"
       else
         statement+="${STATEMENT_DONE_TRIGGER}"
-        PS_current="$(printf "${PS_READ_INPUT}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+        assign_and_print_PS_CURRENT "${PS_READ_INPUT}" ${LINE_NUM} "${PS_SIGN}"
         countdown_to_feed_BC_read=0
         input_type=$'/* \254 */'
       fi
     else
-      PS_current="$(printf "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}" | tee /dev/stderr)"
+      assign_and_print_PS_CURRENT "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}"
     fi
 
     # Feeding BC with the user's input

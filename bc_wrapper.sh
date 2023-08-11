@@ -357,7 +357,7 @@ trap trap_EXIT 0
 
 history -r
 
-set -o emacs
+set -f -o emacs
 bind 'set enable-bracketed-paste off'
 for fun in reverse-search-history forward-search-history possible-filename-completions\
            possible-hostname-completions possible-username-completions clear-screen\
@@ -586,6 +586,49 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
 
         ignore_input_BC
       fi
+    elif [[ "${statement}" == *\?* && "${statement}" =~ ^\ *\??\ *([^?]*)\ *\??\ *$ ]]; then
+      if [[ -n "${BASH_REMATCH[1]}" ]]; then
+        for fun in ${BASH_REMATCH[1]// /$'\n'}; do
+          while read -r line; do
+            if [[ "${line}" == '/*' ]]; then
+              while read -r line; do
+                [[ "${line}" == '*/' ]] && break
+                help+="      ${line}"$'\n'
+              done
+              read -r line
+            fi
+
+            if [[ "${line}" =~ ^\ *define\ +(${fun%%\(*}\([^\)]*\)) ]]; then
+              function="${BASH_REMATCH[1]}"
+
+              if [[ -n "${help}" ]]; then
+                help=$'\033[1mHelp: \033[34m'"${function}"$'\033[m\n'"${help}"
+              else
+                help=$'\033[1;35mNo help written for \033[3m'"${function}"$'\033[m\n'
+              fi
+
+              break
+            else
+              unset help
+            fi
+          done < <(<${LIB_DIR}/custom_functions.bc)
+
+          if [[ -n "${help}" ]]; then
+            help_all+="${help}"$'\n'
+          else
+            help_all+=$'\033[1;35mUnknown function: \033[3m'"${fun%%\(*}()"$'\033[m\n\n'
+          fi
+
+          unset fun line help function
+        done
+
+        printf '%s' "${help_all}"
+        unset help_all
+      else
+        printf $'\033[1;3;35m?\033[23m provides help for custom functions, try: ?<tab>\033[m\n'
+      fi
+
+      ignore_input_BC
     elif [[ "${statement}" =~ \ *print( *\".*\"| +.+) ]]; then
       statement="$(sed -E 's/print(.*,)? *(".*"|[^ ;]+)/&, "\\n"/' <<< "${statement}")"
 

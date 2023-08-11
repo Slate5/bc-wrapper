@@ -14,6 +14,7 @@ ifneq ($(wildcard /usr/local/src/bc_wrapper/bc_wrapper.sh),)
 endif
 	@mkdir -p /usr/local/src/bc_wrapper /usr/local/lib/bc_wrapper
 	@cp $(repo_dir)/bc_wrapper.sh /usr/local/src/bc_wrapper/
+	@cp $(repo_dir)/lib/wrapper_functions.sh /usr/local/lib/bc_wrapper/
 	@cp $(repo_dir)/lib/custom_functions.bc /usr/local/lib/bc_wrapper/
 	@gcc $(repo_dir)/lib/write_to_STDIN.c -o /usr/local/lib/bc_wrapper/write_to_STDIN
 	@update-alternatives --quiet --install $(install_dir)/bc bc /usr/local/src/bc_wrapper/bc_wrapper.sh 10

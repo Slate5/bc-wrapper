@@ -497,6 +497,21 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       fi
     fi
 
+  elif [[ "${input}" =~ (#|/\*) ]]; then
+    history -s -- "${input}"
+    comment_type="${BASH_REMATCH[1]}"
+
+    if [[ "${comment_type}" == '/*' ]]; then
+      input="$(sed 's,/\*[^*/]*\(\*/\)\?,,g' <<< "${input}")"
+      printf '\033[1;35mMulti-line comments are not supported.\033[m\n' >&2
+    else
+      input="${input%%${comment_type}*}"
+    fi
+
+    if [[ "${input}" =~ ^[[:space:]]*$ ]]; then
+      printf '%s' "${PS_CURRENT}" >&2
+      continue
+    fi
   else
     history -s -- "${input}"
   fi

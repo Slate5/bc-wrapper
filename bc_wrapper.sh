@@ -90,7 +90,6 @@ HISTCONTROL='ignoredups:ignorespace'
 HISTSIZE=1000
 HISTFILESIZE=2000
 HISTTIMEFORMAT=$'\033[1;38;5;155m%F\033[38;5;147m %T\033[38;5;137m ⮕\033[39m  '
-HISTTIMEFORMAT=$'\033[1;31m%T\033[33m %d/%m/%y ⮕\033[39m  '
 history -r
 
 source ${LIB_DIR}/wrapper_functions.sh

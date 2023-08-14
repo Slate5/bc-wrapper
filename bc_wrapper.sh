@@ -64,13 +64,20 @@ STATEMENT_DONE_TRIGGER="; print \"${STATEMENT_DONE_TRIGGER_MSG}\\n\""
 
 # Autocomplete statements, separated into several categories
 COMPS_STATEMENTS='define fun() {|if () {|while () {|for (i=0; i<; ++i) {'
-COMPS_KEYWORDS='print \"\"|last|history|warranty|limits|\$|\$\$|quit'
-COMPS_STD='length(expr)|scale(expr)|sqrt(expr)|s(rad)|c(rad)|a(input)|l(arg)|e(exp)|j(order, arg)'
+COMPS_KEYWORDS='print \"\"|last|warranty|limits|quit|history|\$|\$\$|?'
 COMPS_VAR='scale = |base = |ibase = |obase = |concurrent_input = '
+COMPS_STD='read()|length(expr)|scale(expr)|sqrt(expr)|s(rad)|c(rad)|a(input)|l(arg)|e(exp)|j(order, arg)'
 COMPS_EXT="$(awk -F '(^define *| *=|\\))' '
                   /^[a-z]+ *=[^=]/ { printf "%s|", $1 }
                   /^define / { printf "%s)|", $2 }
                 ' ${LIB_DIR}/custom_functions.bc)"
+COMPS_ALL="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_STD}|${COMPS_EXT}"
+IFS='|'
+for comp in ${COMPS_ALL}; do
+  (( MAX_COMP_LEN < ${#comp} )) && MAX_COMP_LEN=${#comp}
+done
+unset comp
+IFS=$' \t\n'
 
 FUNCTIONS_WITH_READ="read$(awk -F '[( ]' '
                             /^define / { tmp = $2 }
@@ -83,281 +90,13 @@ HISTCONTROL='ignoredups:ignorespace'
 HISTSIZE=1000
 HISTFILESIZE=2000
 HISTTIMEFORMAT=$'\033[1;31m%T\033[33m %d/%m/%y ⮕\033[39m  '
+history -r
 
-assign_and_print_PS_CURRENT() {
-  PS_CURRENT="$(printf "${@}")"
-  printf '%s' "${PS_CURRENT}" >&2
-}
-
-# Called indirectly by "readline" when <CTRL><~> is sent to `read -e` (or more
-# precisely, when refresh_PS_CURRENT_using_read() is executed). Then it assigns
-# the PS_READY to ${PS_CURRENT} if `coproc BC` finished a given task.
-# Making this mess came from the need to synchronize `coproc BC` with the main shell.
-refresh_PS_CURRENT() {
-  while read -t 0 -u ${BC[0]}; do
-    IFS= read -ru ${BC[0]} PS_CURRENT
-  done
-
-  printf '%s' "${PS_CURRENT}" >&2
-}
-
-# This triggers refresh_PS_CURRENT(). Used when `read` removes `printf`'s PS
-# (PS_READY, PS_BUSY, etc) on SIGWINCH received, on autocomplete, and primarily when
-# `coproc BC` finishes a task so that ${PS_CURRENT} can be updated in the main shell.
-refresh_PS_CURRENT_using_read() {
-  ${LIB_DIR}/write_to_STDIN 
-}
-
-# When SIGINT is received, BC does not clean STDIN. This function
-# flushes STDIN and resets any nested statement.
-trap_SIGINT() {
-  ${LIB_DIR}/write_to_STDIN 
-
-  if (( BC_STATEMENTS_LVL > 0 )); then
-    unset INDENT
-    PS_SIGN='>'
-    while (( --BC_STATEMENTS_LVL > 0 )); do
-      echo $'} /* \254 */#'"${LINE_NUM}" >&${BC[1]}
-    done
-    echo $'} /* \254 */#SIGINT inside statement#'"${LINE_NUM}" >&${BC[1]}
-
-    unset whole_statement
-  fi
-}
-
-trap_EXIT() {
-  printf '\033[?25h\033[G\033[0K'
-  history -a
-
-  # `kill 0` would cause "Terminated" message and `wait` wouldn't help because it
-  # wouldn't be executed at all. To avoid that message, child processes are
-  # `kill`-ed one by one, from youngest to oldest.
-  for pid in $(pgrep -g $$ | sort -nr); do
-    (( pid == $$ )) && continue
-    kill ${pid} &>/dev/null && wait ${pid} &>/dev/null
-  done
-}
-
-fix_err_line_num_and_print() {
-  local line_num_fixed="$(sed "s/ [0-9]*: / $(( LINE_NUM - 1 )): /" <<< "${1}")"
-  printf '\033[G\033[0K\033[1;31m%s\033[m\n' "${line_num_fixed}" >&2
-}
-
-# Helper function for autocomplete(), helpless attempt to make this wet script DRY...
-autocomplete_print() {
-  color=232
-
-  printf '\n\033[48;5;%dm%*s\033[G' ${bg} ${max_cols} >&2
-  printf '\033[1;48;5;%dm%*s\033[m' ${title_bg} "-${indent}" "${1}" >&2
-}
-
-autocomplete() {
-  local IFS=$'|\n\t'
-
-  if (( BC_STATEMENTS_LVL > 0 )); then
-    declare -I COMPS_KEYWORDS+="|break|continue|halt|auto|return "
-    COMPS_KEYWORDS="$(sed -E 's/\|?(warranty|limits)\|?/|/g' <<< "${COMPS_KEYWORDS}")"
-  fi
-
-  local AUTOCOMPLETE_OPTS="${COMPS_STATEMENTS}|${COMPS_KEYWORDS}|${COMPS_VAR}|${COMPS_STD}|${COMPS_EXT}"
-  local trim_indent_line="${READLINE_LINE#${READLINE_LINE%%[![:space:]]*}}"
-  local comps
-  local i dist=0 indent=12
-  local max_cols_st max_cols_kw max_cols_var max_cols_std max_cols_ext max_cols
-  local comp row_len color bg title_bg st_done kw_done var_done std_done ext_done
-  local common_substring
-  local position_part
-
-  refresh_read_cmd
-
-  comps=( $(compgen -W "${AUTOCOMPLETE_OPTS}" -- "${trim_indent_line}") )
-  if (( $? != 0 )); then
-    printf '\a'
-    return 1
-  fi
-
-  if (( ${#comps[@]} > 1 )); then
-    for i in ${AUTOCOMPLETE_OPTS}; do
-      (( dist < ${#i} )) && dist=${#i}
-    done
-
-    for i in ${comps[@]}; do
-      if [[ "|${COMPS_STATEMENTS//\\}|" == *"|${i}|"* ]]; then
-        (( max_cols_st += dist + 1 ))
-      elif [[ "|${COMPS_KEYWORDS//\\}|" == *"|${i}|"* ]]; then
-        (( max_cols_kw += dist + 1 ))
-      elif [[ "|${COMPS_VAR//\\}|" == *"|${i}|"* ]]; then
-        (( max_cols_var += dist + 1 ))
-      elif [[ "|${COMPS_STD//\\}|" == *"|${i}|"* ]]; then
-        (( max_cols_std += dist + 1 ))
-      elif [[ "|${COMPS_EXT//\\}|" == *"|${i}|"* ]]; then
-        (( max_cols_ext += dist + 1 ))
-      fi
-    done
-
-    max_cols=$(printf "${max_cols_st}\n${max_cols_kw}\n${max_cols_var}\n${max_cols_std}\n${max_cols_ext}" | sort -n | tail -n 1)
-
-    (( max_cols += indent ))
-
-    while (( max_cols > COLUMNS )); do
-      (( max_cols -= dist + 1 ))
-    done
-
-    for comp in ${comps[@]}; do
-      if [[ -z "${st_done}" && "|${COMPS_STATEMENTS//\\}|" == *"|${comp}|"* ]]; then
-        st_done=yes
-        bg=238
-        title_bg=237
-        row_len=${indent}
-
-        autocomplete_print 'Statements:'
-      elif [[ -z "${kw_done}" && "|${COMPS_KEYWORDS//\\}|" == *"|${comp}|"* ]]; then
-        kw_done=yes
-        bg=239
-        title_bg=236
-        row_len=${indent}
-
-        autocomplete_print 'Keywords:'
-      elif [[ -z "${var_done}" && "|${COMPS_VAR//\\}|" == *"|${comp}|"* ]]; then
-        var_done=yes
-        bg=240
-        title_bg=235
-        row_len=${indent}
-
-        autocomplete_print 'Variables:'
-      elif [[ -z "${std_done}" && "|${COMPS_STD//\\}|" == *"|${comp}|"* ]]; then
-        std_done=yes
-        bg=241
-        title_bg=234
-        row_len=${indent}
-
-        autocomplete_print 'Std Lib:'
-      elif [[ -z "${ext_done}" && "|${COMPS_EXT//\\}|" == *"|${comp}|"* ]]; then
-        ext_done=yes
-        bg=242
-        title_bg=233
-        row_len=${indent}
-
-        autocomplete_print 'Extras:'
-      fi
-
-      (( row_len += dist + 1 ))
-      if (( row_len > COLUMNS )); then
-        autocomplete_print
-        (( row_len = indent + dist + 1 ))
-      fi
-
-      (( color = (color + 230) % 233 ))
-      printf '\033[1;38;5;%d;48;5;%dm %*s\033[m' ${color} ${bg} "-${dist}" "${comp}" >&2
-
-    done
-
-    echo
-    common_substring="$(printf "%s\n" "${comps[@]}" | sed -e '$!{N;s/^\(.*\).*\n\1.*$/\1\n\1/;D;}')"
-    READLINE_LINE="${READLINE_LINE%%${common_substring:0:1}*}${common_substring}"
-    READLINE_POINT="${#READLINE_LINE}"
-
-  else
-    if [[ "${comps[0]}" == *\) ]]; then
-      READLINE_LINE="${READLINE_LINE%%${comps[0]:0:1}*}${comps[0]/(*)/()}"
-    else
-      READLINE_LINE="${READLINE_LINE%%${comps[0]:0:1}*}${comps[0]}"
-    fi
-
-    case "${comps[0]}" in
-      for\ \(*++i*) position_part="${READLINE_LINE%%; ++i*}" ;;
-      *\(*\)*) position_part="${READLINE_LINE%%\)*}" ;;
-      print\ *) position_part="${READLINE_LINE%\"*}" ;;
-      *) position_part="${READLINE_LINE}" ;;
-    esac
-
-    READLINE_POINT="${#position_part}"
-  fi
-}
-
-create_list() {
-  local list_line
-  [[ "${input}" =~ ^[[:space:]]*$ ]] || input_list="${input}"$'\n'
-
-  while :; do
-    IFS= read -ser list_line
-    [[ "${list_line}" =~ ^[[:space:]]*$ ]] || input_list+="${list_line}"$'\n'
-
-    read -t 0 || break
-  done
-
-  input_list="${input_list:0:-1}"
-}
-
-modify_list_of_num() {
-  local answer ascii_char_octal
-
-  local PS_opts='Available options [+-*/aosdq]: [ ]'
-  local PS_desc='(a - average, o - output, s - sort, d - descending sort, q - quit)'
-  local input_position=$'\033[G\033['"$(( ${#PS_opts} - 2 ))C"
-
-  local PS=$'\033[G\033[0K\033[1;35m'"${PS_opts}"$'\033[m\n'"${PS_desc}"$'\033[A'"${input_position}"
-  local PS_wrong=$'\033[4C\033[1;31m'"Input unknown${input_position}"
-
-  stty -echo
-
-  printf '\033[?25l\033[G\033[0KList detected: %s\n\n' "${input_list//$'\n'/, }"
-
-  while IFS= read -srN 1 -p "${PS}" answer; do
-    case "${answer}" in
-      [+\-/*]) input_list="${input_list//$'\n'/${answer}}" ;;
-      a) input_list="(${input_list//$'\n'/+}) / ${input_list_line_num}" ;;
-      o) input_list="${input_list//$'\n'/;}" ;;
-      s) input_list="$(sort -n <<< "${input_list}" | tr '\n' ';')" ;;
-      d) input_list="$(sort -rn <<< "${input_list}" | tr '\n' ';')" ;;
-      q) unset input_list ;;
-      []) # Caught when SIGINT received, thanks to trap_SIGINT
-        unset input_list
-        read -n 1000 -t 0.005
-        printf "${PS}"
-        answer=q
-        ;;
-      *) # Any other input will warn the user and loop again
-        if (( $(printf -- '%s' "${answer}" | wc -c) > 1 )); then
-          answer=?
-        else
-          ascii_char_octal=$(printf -- '%s' "${answer}" | od -dA n)
-          if (( ascii_char_octal < 32 || ascii_char_octal > 126 )); then
-            answer=?
-          fi
-        fi
-
-        IFS= read -t 0.8 -srN 1 -p "${PS_wrong}${answer}" answer
-
-        if (( $(printf -- '%s' "${answer}" | wc -c) == 1 )); then
-          ascii_char_octal=$(printf -- '%s' "${answer}" | od -dA n)
-
-          if (( ascii_char_octal > 31 && ascii_char_octal < 127 )); then
-            ${LIB_DIR}/write_to_STDIN ${answer}
-          fi
-        fi
-
-        continue
-        ;;
-    esac
-
-    break
-  done
-
-  printf '\033[1;32m%s\033[m\033[?25h\n' "${answer}"
-  stty echo
-}
-
-ignore_input_BC() {
-  statement='/* ignore */'
-  (( BC_STATEMENTS_LVL == 0 )) && input_type=$'/* \255 */'
-}
+source ${LIB_DIR}/wrapper_functions.sh
 
 trap refresh_PS_CURRENT_using_read 28
 trap trap_SIGINT 2
 trap trap_EXIT 0
-
-history -r
 
 set -f -o emacs
 bind 'set enable-bracketed-paste off'

@@ -135,6 +135,10 @@ coproc BC {
           printf '\033[G\033[0K\033[1;33m%s\033[m\n' "${bc_output}" >&2
           ;;
         *standard_in*|*error*)
+          if [[ -n "${postpone_PS_READY}" ]]; then
+            unset postpone_PS_READY
+          fi
+
           fix_err_line_num_and_print "${bc_output}"
           ;;
         *warning*)

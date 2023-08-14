@@ -537,6 +537,8 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
   fi
 
   for statement in ${input}; do
+    [[ "${statement}" =~ ^[[:space:]]*$ ]] && continue
+
     if [ -n "${input_list_counter}" ] && (( input_list_counter++ > 0 )); then
       history -s -- "${statement}"
       (( LINE_NUM++ ))
@@ -804,7 +806,8 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     if (( CONCURRENT_INPUT + BC_STATEMENTS_LVL == 0 )) && [ -z "${countdown_to_feed_BC_read}" ]; then
       printf '\033[?25l\033[1;33m'
 
-      while :; do sleep 0.12; printf "${SPINNER:i++%4:1}\033[D"; done &
+      unset i
+      while sleep 0.12; do printf "${SPINNER:i++%4:1}\033[D" >&2; done &
       spinner_pid=$(jobs -p %)
 
       while read -srn 1 calc_finished; do
@@ -814,8 +817,14 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         fi
       done
 
-      kill ${spinner_pid}
       printf '\033[?25h\033[m'
+      if kill -0 ${spinner_pid} &>/dev/null; then
+        kill ${spinner_pid}
+      else
+        unset input_list_counter
+        CONCURRENT_INPUT="${concurrent_input:-1}"
+        continue 2
+      fi
     fi
   done
 done

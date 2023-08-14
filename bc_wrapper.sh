@@ -488,6 +488,8 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     elif [[ "${input_list//$'\n'}" == *[^0-9]* ]]; then
       CONCURRENT_INPUT=0
       input_list_counter=0
+
+      history -s -- "${input}"
     else
       modify_list_of_num
 

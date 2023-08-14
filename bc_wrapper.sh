@@ -40,6 +40,8 @@ LIB_DIR='/usr/local/lib/bc_wrapper'
 export BC_LINE_LENGTH=0
 
 BC_BASE=10
+BASE_MIN=2
+BASE_MAX=16
 LINE_NUM=1
 CONCURRENT_INPUT=1
 SPINNER='━╲┃╱'
@@ -369,6 +371,7 @@ for fun in reverse-search-history forward-search-history possible-filename-compl
 do
   bind -u ${fun}
 done
+unset fun
 bind -x '"\C-i":"autocomplete"'
 bind -x '"\C-~":"refresh_PS_CURRENT"'
 bind -x '"\C-l":"clear -x; refresh_PS_CURRENT_using_read"'
@@ -568,6 +571,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     fi
 
     if [[ "${statement}" =~ ^\ *history\ *$ ]]; then
+      printf '\033[G\033[0K'
       history >&2
 
       ignore_input_BC
@@ -595,10 +599,16 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         printf '\033[G\033[0K\033[1;35mWarning: Bash output ' >&2
         printf "goes into BC's input automatically.\033[0m\n" >&2
       fi
-    elif [[ "${statement}" =~ ^\ *concurrent_input\ *=\ *([^=; ]+) ]]; then
-      if [[ "${BASH_REMATCH[1]}" == [01] ]]; then
-        concurrent_input=${BASH_REMATCH[1]}
-        CONCURRENT_INPUT=${concurrent_input}
+    elif [[ "${statement}" =~ ^\ *concurrent_input\ *([%^*/+-]?)=\ *([^=; ]+) ]]; then
+      state="${BASH_REMATCH[2]}"
+
+      if [[ -n "${BASH_REMATCH[1]}" ]]; then
+        state="$(bc <<< "${CONCURRENT_INPUT} ${BASH_REMATCH[1]} ${state}")"
+      fi
+
+      if [[ "${state}" == [01] ]]; then
+        concurrent_input=${state}
+        CONCURRENT_INPUT=${state}
       else
         printf '\033[G\033[0K\033[1;35mWarning: Special variable ' >&2
         printf 'accepts 1 or 0 to switch concurrent input on/off.\n' >&2
@@ -612,7 +622,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
             if [[ "${line}" == '/*' ]]; then
               while read -r line; do
                 [[ "${line}" == '*/' ]] && break
-                help+="      ${line}"$'\n'
+                help+=$'\033[G\033[0K'"      ${line}"$'\n'
               done
               read -r line
             fi
@@ -621,9 +631,9 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
               function="${BASH_REMATCH[1]}"
 
               if [[ -n "${help}" ]]; then
-                help=$'\033[1mHelp: \033[34m'"${function}"$'\033[m\n'"${help}"
+                help=$'\033[G\033[0K\033[1mHelp: \033[34m'"${function}"$'\033[m\n'"${help}"
               else
-                help=$'\033[1;35mNo help written for \033[3m'"${function}"$'\033[m\n'
+                help=$'\033[G\033[0K\033[1;35mNo help written for \033[3m'"${function}"$'\033[m\n'
               fi
 
               break
@@ -635,7 +645,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
           if [[ -n "${help}" ]]; then
             help_all+="${help}"$'\n'
           else
-            help_all+=$'\033[1;35mUnknown function: \033[3m'"${fun%%\(*}()"$'\033[m\n\n'
+            help_all+=$'\033[G\033[0K\033[1;35mUnknown function: \033[3m'"${fun%%\(*}()"$'\033[m\n\n'
           fi
 
           unset fun line help function
@@ -644,7 +654,8 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         printf '%s' "${help_all}"
         unset help_all
       else
-        printf $'\033[1;3;35m?\033[23m provides help for custom functions, try: ?<tab>\033[m\n'
+        printf $'\033[G\033[0K\033[1;3;35m?\033[23m provides help '
+        printf $'for custom functions, try: ?<tab>\033[m\n'
       fi
 
       ignore_input_BC
@@ -658,13 +669,17 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         statement='/* ignore */'
       fi
 
-    elif [[ "${statement}" =~ (^| +)([io]?base)\ *=\ *(-?[0-9]+)( +|$) ]]; then
-      input_base="${BASH_REMATCH[3]}"
+    elif [[ "${statement}" =~ (^| +)([io]?base)\ *([%^*/+-]?)=\ *(-?[0-9]+)( +|$) ]]; then
+      input_base="${BASH_REMATCH[4]}"
 
-      if (( input_base > 16 )); then
+      if [[ -n "${BASH_REMATCH[3]}" ]]; then
+        input_base="$(bc <<< "${BC_BASE} ${BASH_REMATCH[3]} ${input_base}")"
+      fi
+
+      if (( input_base > BASE_MAX )); then
         printf '\033[G\033[0K\033[1;35mWarning: base too large, set to 16\033[0m\n' >&2
         input_base=16
-      elif (( input_base < 2 )); then
+      elif (( input_base < BASE_MIN )); then
         printf '\033[G\033[0K\033[1;35mWarning: base too small, set to 2\033[0m\n' >&2
         input_base=2
       fi

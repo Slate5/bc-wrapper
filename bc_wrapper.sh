@@ -123,30 +123,8 @@ coproc BC {
   bc -liq ${LIB_DIR}/custom_functions.bc |&
     while IFS= read -r bc_output; do
       case "${bc_output}" in
-        *interrupt*)
-          if [[ -n "${postpone_PS_READY}" ]]; then
-            unset postpone_PS_READY
-          fi
-
-          if [[ -n "${statement_interrupted}" ]]; then
-            unset statement_interrupted
-            continue
-          fi
-
-          printf '\033[G\033[0K\033[1;33m%s\033[m\n' "${bc_output}" >&2
-          ;;
-        *standard_in*|*error*)
-          if [[ -n "${postpone_PS_READY}" ]]; then
-            unset postpone_PS_READY
-          fi
-
-          fix_err_line_num_and_print "${bc_output}"
-          ;;
-        *warning*)
-          printf '\033[G\033[0K\033[1;35m%s\033[m\n' "${bc_output}" >&2
-          ;;
         *$'/* \254 */#'*) # Type of input that shouldn't print green PS, e.g. 2^222222
-          (( LINE_NUM = $(grep -o '^[0-9]*' <<< ${bc_output##*#}) ))
+          (( LINE_NUM = $(grep -o '^[0-9]\+' <<< ${bc_output##*#} || echo ${LINE_NUM}) ))
 
           # Upon receiving SIGINT, trap_SIGINT() close all statements with "}". That
           # could potentially cause infinite loop in a background e.g. while (1) {}
@@ -160,7 +138,7 @@ coproc BC {
           # to appear after the first successful calculation. It waits until the
           # statement is done, e.g. for (i=0; i<10; ++i) 2^222222. Also, it is
           # needed when BC's read() is inside the iterator to keep PS_READ_INPUT.
-          if [[ "${bc_output}" == *"${STATEMENT_DONE_TRIGGER}"* ]]; then
+          if [[ "${bc_output}" == *"${STATEMENT_DONE_TRIGGER_MSG}"* ]]; then
             postpone_PS_READY=true
           fi
 
@@ -168,13 +146,14 @@ coproc BC {
           ;;
         *$'/* \255 */#'*) # Type of input that should print green PS, e.g. a = 2
           if [[ -n "${postpone_PS_READY}" ]]; then
-            if [[ "${bc_output}" == "${STATEMENT_DONE_TRIGGER_MSG}" ]]; then
+            if [[ "${bc_output}" == "${STATEMENT_DONE_TRIGGER_MSG}"* ]]; then
+              (( LINE_NUM = $(grep -o '^[0-9]\+' <<< ${bc_output##*#} || echo ${LINE_NUM}) ))
               unset postpone_PS_READY
             else
               continue
             fi
           else
-            (( LINE_NUM = $(grep -o '^[0-9]*' <<< ${bc_output##*#}) ))
+            (( LINE_NUM = $(grep -o '^[0-9]\+' <<< ${bc_output##*#} || echo ${LINE_NUM}) ))
 
             if [[ "${bc_output}" =~ ^\ *(warranty|limits)\ +/\*\  ]]; then
               while read -t 0; do
@@ -185,7 +164,29 @@ coproc BC {
           fi
 
           ;;
-        *?*)
+        *interrupt*[^$'\t'])
+          if [[ -n "${postpone_PS_READY}" ]]; then
+            unset postpone_PS_READY
+          fi
+
+          if [[ -n "${statement_interrupted}" ]]; then
+            unset statement_interrupted
+            continue
+          fi
+
+          printf '\033[G\033[0K\033[1;33m%s\033[m\n' "${bc_output}" >&2
+          ;;
+        *standard_in*[^$'\t']|*error*[^$'\t'])
+          if [[ -n "${postpone_PS_READY}" ]]; then
+            unset postpone_PS_READY
+          fi
+
+          fix_err_line_num_and_print "${bc_output}"
+          ;;
+        *warning*[^$'\t'])
+          printf '\033[G\033[0K\033[1;35m%s\033[m\n' "${bc_output}" >&2
+          ;;
+        ?*)
           printf '\033[G\033[0K\033[1;35m=>\033[39m %s\033[m\n' "${bc_output}" >&2
 
           # If there is a looped output (e.g. while (1) { print "hi" }),
@@ -362,13 +363,13 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     elif [[ "${statement}" == *\?* && "${statement}" =~ ^\ *\??\ *([^?]*)\ *\??\ *$ ]]; then
       if [[ -n "${BASH_REMATCH[1]}" ]]; then
         for fun in ${BASH_REMATCH[1]// /$'\n'}; do
-          while read -r line; do
+          while IFS= read -r line; do
             if [[ "${line}" == '/*' ]]; then
-              while read -r line; do
+              while IFS= read -r line; do
                 [[ "${line}" == '*/' ]] && break
                 help+=$'\033[G\033[0K'"      ${line}"$'\n'
               done
-              read -r line
+              IFS= read -r line
             fi
 
             if [[ "${line}" =~ ^\ *define\ +(${fun%%\(*}\([^\)]*\)) ]]; then
@@ -404,7 +405,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
 
       ignore_input_BC
     elif [[ "${statement}" =~ \ *print( *\".*\"| +.+) ]]; then
-      statement="$(sed -E 's/print(.*,)? *(".*"|[^ ;]+)/&, "\\n"/' <<< "${statement}")"
+      statement="$(sed -E 's/print(.*,)? *(".*"|[^ ;]+)/&, "\\t\\n"/' <<< "${statement}")"
 
     elif [[ "${statement}" =~ ^\ *(warranty|limits)\ *$ ]]; then
       if (( BC_STATEMENTS_LVL == 0 )); then
@@ -569,7 +570,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       while sleep 0.12; do printf "${SPINNER:i++%4:1}\033[D" >&2; done &
       spinner_pid=$(jobs -p %)
 
-      while read -srn 1 calc_finished; do
+      while IFS= read -srn 1 calc_finished; do
         if [[ "${calc_finished}" == $'\036' ]]; then
           refresh_PS_CURRENT
           break

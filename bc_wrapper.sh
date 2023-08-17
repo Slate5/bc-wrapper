@@ -57,7 +57,7 @@ PS_DUMMY=$'\033[G\033['"${SATISFY_PS_DUMMY_LEN}${PS_LEN}C"
 PS_READY=$'\033[G\033[0K\033[1;32mBC\033[m:%02d> '
 PS_SIGN='>'
 PS_BUSY=$'\033[G\033[0K\033[1;33mBC\033[m:%02d%s '
-PS_READ_INPUT=$'\033[G\033[0K\033[1;2;33mIN\033[0;2m:%02d\033[5;31m%s\033[m '
+PS_READ_INPUT=$'\033[G\033[0K\033[1;2;33mIN\033[0;2m:%02d\033[5;31m<\033[m '
 PS_CURRENT=''
 STATEMENT_DONE_TRIGGER_MSG=$'/* \255 */#STATEMENT DONE'
 STATEMENT_DONE_TRIGGER="; print \"${STATEMENT_DONE_TRIGGER_MSG}\\n\""
@@ -550,7 +550,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       statement="${statement/${STATEMENT_DONE_TRIGGER_MSG}/${STATEMENT_DONE_TRIGGER_MSG}#${LINE_NUM}}"
       (( countdown_to_feed_BC_read-- ))
 
-      assign_and_print_PS_CURRENT "${PS_READ_INPUT}" $(( LINE_NUM - 1 )) "${PS_SIGN}"
+      assign_and_print_PS_CURRENT "${PS_READ_INPUT}" $(( LINE_NUM - 1 ))
     elif [[ "${statement}" =~ (^|[\;\(\{= ])(${FUNCTIONS_WITH_READ})\ *\( ]]; then
       if [[ "${statement}" == *'define '* ]]; then
         FUNCTIONS_WITH_READ="$(sed "s/|${BASH_REMATCH[2]}\b//g" <<< "${FUNCTIONS_WITH_READ}")"
@@ -570,7 +570,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
           statement+="${STATEMENT_DONE_TRIGGER/\\n/#${LINE_NUM}\\n}"
         fi
 
-        assign_and_print_PS_CURRENT "${PS_READ_INPUT}" $(( LINE_NUM - 1 )) "${PS_SIGN}"
+        assign_and_print_PS_CURRENT "${PS_READ_INPUT}" $(( LINE_NUM - 1 ))
         countdown_to_feed_BC_read=0
         input_type=$'/* \254 */'
       fi

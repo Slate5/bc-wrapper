@@ -95,6 +95,7 @@ history -r
 source ${LIB_DIR}/wrapper_functions.sh
 
 trap refresh_PS_CURRENT_using_read 28
+trap '' 3
 trap trap_SIGINT 2
 trap trap_EXIT 0
 

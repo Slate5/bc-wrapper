@@ -220,8 +220,14 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     continue
   elif [[ "${countdown_to_feed_BC_read}" == 0 ]]; then
     refresh_PS_CURRENT
+
     if [[ "${PS_CURRENT}" != *'IN'* ]]; then
+      # Flush buffer
+      echo $'while (flush = read()) {} /* \254 */#'"${LINE_NUM}" >&${BC[1]}
+      echo 0 >&${BC[1]}
+
       unset countdown_to_feed_BC_read
+      history -s -- "${input}"
     else
       echo "${input}" >&${BC[1]}
       continue
@@ -279,6 +285,8 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     unset input_list
     IFS=$'\n'
   elif [[ "${input}" =~ (^|[[:space:]]+)for[[:space:]]*\(.*\; ]]; then
+    IFS=$'\n'
+  elif [[ "${input}" == *\;* && "${input}" =~ (^|[^_[:alnum:]])(${FUNCTIONS_WITH_READ})\ *\( ]]; then
     IFS=$'\n'
   else
     IFS=$';\n'
@@ -539,10 +547,15 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     # BC's read() is quirky at processing input, buffering, etc. This block of code tries to
     # mimic the same weird and confusing behavior (if not even surpass it) of GNU BC's read().
     if (( countdown_to_feed_BC_read > 0 && BC_STATEMENTS_LVL == 0 )); then
+      statement="${statement/${STATEMENT_DONE_TRIGGER_MSG}/${STATEMENT_DONE_TRIGGER_MSG}#${LINE_NUM}}"
       (( countdown_to_feed_BC_read-- ))
-      assign_and_print_PS_CURRENT "${PS_READ_INPUT}" ${LINE_NUM} "${PS_SIGN}"
-    elif [[ "${statement}" != *'define '* && "${statement}" =~ (^|[= ])(${FUNCTIONS_WITH_READ})\ *\( ]]; then
-      if (( BC_STATEMENTS_LVL > 0 )); then
+
+      assign_and_print_PS_CURRENT "${PS_READ_INPUT}" $(( LINE_NUM - 1 )) "${PS_SIGN}"
+    elif [[ "${statement}" =~ (^|[\;\(\{= ])(${FUNCTIONS_WITH_READ})\ *\( ]]; then
+      if [[ "${statement}" == *'define '* ]]; then
+        FUNCTIONS_WITH_READ="$(sed "s/|${BASH_REMATCH[2]}\b//g" <<< "${FUNCTIONS_WITH_READ}")"
+        assign_and_print_PS_CURRENT "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}"
+      elif (( BC_STATEMENTS_LVL > 0 )); then
         new_function_with_read="$(grep -Po '^ *define +\K[^( ]+' <<< "${whole_statement}")"
         if (( $? == 0 )); then
           FUNCTIONS_WITH_READ+="|${new_function_with_read}"
@@ -551,8 +564,13 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
         fi
         assign_and_print_PS_CURRENT "${PS_BUSY}" ${LINE_NUM} "${PS_SIGN}"
       else
-        statement+="${STATEMENT_DONE_TRIGGER}"
-        assign_and_print_PS_CURRENT "${PS_READ_INPUT}" ${LINE_NUM} "${PS_SIGN}"
+        if [[ "${statement}" == *"${STATEMENT_DONE_TRIGGER}"* ]]; then
+          statement="${statement/${STATEMENT_DONE_TRIGGER_MSG}/${STATEMENT_DONE_TRIGGER_MSG}#${LINE_NUM}}"
+        else
+          statement+="${STATEMENT_DONE_TRIGGER/\\n/#${LINE_NUM}\\n}"
+        fi
+
+        assign_and_print_PS_CURRENT "${PS_READ_INPUT}" $(( LINE_NUM - 1 )) "${PS_SIGN}"
         countdown_to_feed_BC_read=0
         input_type=$'/* \254 */'
       fi

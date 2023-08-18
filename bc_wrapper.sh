@@ -44,7 +44,8 @@ BASE_MIN=2
 BASE_MAX=16
 LINE_NUM=1
 CONCURRENT_INPUT=1
-SPINNER='━╲┃╱'
+SPINNER='⢎⡱⣉⠆⢎⡱⣈⠆⢎⡱⣀⠆⢎⡱⣀⠄⢎⡱⣀ ⢎⡱⡀ ⢎⡱  ⢎⡱  ⢎⡡  ⢎⡠  ⢆⡠  ⢄⡠  ⢀⡠   ⡠   ⠠   ⠰   ⠐   ⠐⠁  ⠐⠉  ⠐⠉⠂ ⠐⠉⠆ ⠐⢉⠆ ⠐⣉⠆ ⠰⣉⠆ ⠰⣉⠆ ⠱⣉⠆⠈⠱⣉⠆⠊⠱⣉⠆⠎⠱⣉⠆⢎⠱⣉⠆⢎⡱⣉⠆⢎⡱⣉⠆'
+SPINNER_FRAME_LEN=4
 SATISFY_PS_DUMMY_LEN=''
 PS_LEN=7
 # `read` used for interaction with the user is fed with this PS_DUMMY to mimic
@@ -582,10 +583,21 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
     echo "${statement} ${input_type}#${LINE_NUM}" >&${BC[1]}
 
     if (( CONCURRENT_INPUT + BC_STATEMENTS_LVL == 0 )) && [ -z "${countdown_to_feed_BC_read}" ]; then
-      printf '\033[?25l\033[1;33m'
+      printf '\033[?25l'
 
-      unset i
-      while sleep 0.12; do printf "${SPINNER:i++%4:1}\033[D" >&2; done &
+      while :; do
+        (( frame_num = 0 ))
+        for color in {255..240} {239..254}; do
+          sleep 0.08
+          (( $? != 0 )) && break 2
+
+          frame="${SPINNER:frame_num:SPINNER_FRAME_LEN}"
+          printf "\033[0;38;5;${color}m${frame}\033[${SPINNER_FRAME_LEN}D\033[0;1m"
+
+          (( frame_num += SPINNER_FRAME_LEN ))
+        done
+      done &
+
       spinner_pid=$(jobs -p %)
 
       while IFS= read -srn 1 calc_finished; do

@@ -591,7 +591,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       while IFS= read -srn 1 calc_finished; do
         if [[ "${calc_finished}" == $'\036' ]]; then
           refresh_PS_CURRENT
-          break
+          [[ "${PS_CURRENT}" == "${PS_READY%%:*}:"* ]] && break
         fi
       done
 

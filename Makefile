@@ -4,7 +4,10 @@
 
 SHELL := /bin/bash
 repo_dir := $(abspath $(dir $(MAKEFILE_LIST)))
-install_dir := $(shell grep -Po '^.*?\K/home/$(USER)[^:]*' <<< $(PATH) || echo /usr/local/bin)
+real_user := $(shell logname)
+real_user_home := "$(shell getent passwd $(real_user) | cut -d: -f6)"
+real_user_path := "$(shell sudo -iu $(real_user) printenv PATH)"
+install_dir := $(shell grep -Po "^.*?\K$(real_user_home)/[^:]*" <<< $(real_user_path) || echo /usr/local/bin)
 
 install: _check_permission
 	$(info Installing...)
@@ -23,8 +26,8 @@ ifeq ($(shell command -v xfce4-terminal &>/dev/null),)
 	@mkdir -p /usr/local/etc/bc_wrapper/xfce4/terminal/
 	@cp $(repo_dir)/etc/bc_wrapper*.svg /usr/local/etc/bc_wrapper/
 	@cp $(repo_dir)/etc/terminalrc /usr/local/etc/bc_wrapper/xfce4/terminal/
-	@if [[ -e /home/$(USER)/.local/share/applications/ && "$(install_dir)" == *home* ]]; then \
-		cp $(repo_dir)/etc/bc_wrapper.desktop /home/$(USER)/.local/share/applications/; \
+	@if [[ -e $(real_user_home)/.local/share/applications/ && "$(install_dir)" == *home* ]]; then \
+		cp $(repo_dir)/etc/bc_wrapper.desktop $(real_user_home)/.local/share/applications/; \
 	else \
 		cp $(repo_dir)/etc/bc_wrapper.desktop /usr/share/applications/; \
 	fi
@@ -39,9 +42,10 @@ remove: _check_permission
 	@printf 'Removing... '
 	@update-alternatives --quiet --remove bc /usr/local/src/bc_wrapper/bc_wrapper.sh
 	@rm -rf /usr/local/src/bc_wrapper /usr/local/lib/bc_wrapper
+	@rm -f $(real_user_home)/.bc_history
 ifeq ($(shell command -v xfce4-terminal &>/dev/null),)
 	@rm -rf /usr/local/etc/bc_wrapper
-	@rm -f /home/$(USER)/.local/share/applications/bc_wrapper.desktop
+	@rm -f $(real_user_home)/.local/share/applications/bc_wrapper.desktop
 	@rm -f /usr/share/applications/bc_wrapper.desktop
 endif
 	@echo Done

@@ -108,7 +108,7 @@ for fun in reverse-search-history forward-search-history possible-filename-compl
            possible-command-completions insert-completions glob-list-expansions\
            glob-complete-word edit-and-execute-command dynamic-complete-history\
            display-shell-version complete-command complete-filename complete-hostname\
-           complete-into-braces complete-username complete-variable complete
+           complete-into-braces complete-username complete-variable complete digit-argument
 do
   bind -u ${fun}
 done

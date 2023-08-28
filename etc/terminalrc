@@ -1,6 +1,6 @@
 [Configuration]
 BackgroundImageFile=/usr/local/etc/bc_wrapper/bc_wrapper_bg.svg
-BackgroundImageShading=.8
+BackgroundImageShading=.75
 BackgroundImageStyle=TERMINAL_BACKGROUND_STYLE_FILLED
 BackgroundMode=TERMINAL_BACKGROUND_IMAGE
 ColorBackground=#111509
@@ -17,7 +17,7 @@ MiscCopyOnSelect=TRUE
 MiscCursorBlinks=TRUE
 MiscCursorShape=TERMINAL_CURSOR_SHAPE_IBEAM
 MiscCycleTabs=TRUE
-MiscDefaultGeometry=80x24+0+0
+MiscDefaultGeometry=88x24+0+0
 MiscHighlightUrls=FALSE
 MiscInheritGeometry=TRUE
 MiscMenubarDefault=FALSE
@@ -27,7 +27,7 @@ MiscMouseWheelZoom=TRUE
 MiscNewTabAdjacent=TRUE
 MiscRewrapOnResize=TRUE
 MiscRightClickAction=TERMINAL_RIGHT_CLICK_ACTION_PASTE_CLIPBOARD
-MiscSearchDialogOpacity=.75
+MiscSearchDialogOpacity=100
 MiscShowRelaunchDialog=TRUE
 MiscShowUnsafePasteDialog=FALSE
 MiscSlimTabs=TRUE

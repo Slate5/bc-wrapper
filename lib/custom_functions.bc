@@ -1,31 +1,508 @@
-pi = 3.14159265358979323846
-e = 2.71828182845904523536
+/*
+When adding a new function, in order to use the help (e.g., `? new_function()`
+or `new_function() ?`) inside of the wrapper, write a multi-line comment above
+the function like it has already been done in this file. The multi-line comment
+has to be right above the function without any newline that separates them.
+*/
 
-define log(arg) {
-  return l(arg) / l(10)
+# Global variables
+pi = 4 * a(1)
+e = e(1)
+
+/*
+Returns the value of an expression to the power of an exponent.
+
+Both parameters, expr and exp, can receive any real number as arguments.
+
+Example:
+  To calculate: 4 ^ 5.6:
+  BC:01> pow(4, 5.6)
+  => 2352.53423103392769384595
+*/
+define pow(expr, exp) {
+  auto old_scale, int_check, truncate_exp
+
+  old_scale = scale
+  scale = 0
+  int_check = exp * 2 % 2
+  truncate_exp = exp / 1
+  scale = old_scale
+
+  if (int_check == 0) {
+    return expr ^ truncate_exp
+  } else {
+    return root(rec(exp), expr)
+  }
+
 }
 
-define lg(arg, base) {
-  return l(arg) / l(base)
+/*
+Calculates the natural logarithm of an expression.
+
+The parameter expr accepts any real number as argument.
+
+  - if expr > 0, the result will be returned as a real number
+  - if expr < 0, the result will be printed as a complex number
+  - if expr == 0, the result will be printed as undefined
+
+Returns:
+  - 0 if expr < 0 or expr == 0
+  - value if expr > 0 (is 0 for ln(1))
+
+Examples:
+  To calculate the natural logarithm of 10:
+  BC:01> ln(10)
+  => 2.30258509299404568401
+
+  To calculate the natural logarithm of -10:
+  BC:01> ln(-10)
+  => 2.30258509299404568401 + 3.14159265358979323844 i
+  => 0
+*/
+define ln(expr) {
+
+  if (expr < 0) {
+    print l(-expr), \
+          " + ", \
+          pi, \
+          " i\n"
+  } else if (expr == 0) {
+    print "Undefined\n"
+  } else {
+    return l(expr)
+  }
+
+  return 0
 }
 
+/*
+Calculates the common logarithm (logarithm with base 10) of an expression.
+
+The parameter expr accepts any real number as argument.
+
+  - if expr > 0, the result will be returned as a real number
+  - if expr < 0, the result will be printed as a complex number
+  - if expr == 0, the result will be printed as undefined
+
+Returns:
+  - 0 if expr < 0 or expr == 0
+  - value if expr > 0 (is 0 for lg(1))
+
+Examples:
+  To calculate the common logarithm of 100:
+  BC:01> lg(10)
+  => 2
+
+  To calculate the common logarithm of -100:
+  BC:01> lg(-100)
+  => 2.00000000000000000000 + 1.36437635384184134748 i
+  => 0
+*/
+define lg(expr) {
+
+  if (expr < 0) {
+    print l(-expr) / l(10), \
+          " + ", \
+          pi / l(10), \
+          " i\n"
+  } else if (expr == 0) {
+    print "Undefined\n"
+  } else {
+    return l(expr) / l(10)
+  }
+
+  return 0
+}
+
+/*
+Calculates the logarithm with base n of an expression.
+
+Both parameters, base and expr, accept any real number as arguments.
+
+  - if expr > 0 and base > 0, the result will be returned as a real number
+  - if expr == 0, the result will be printed as undefined
+  - in any other case, the result will be printed as a complex number
+
+Returns:
+  - 0 if expr < 0 or expr == 0
+  - value if expr > 0 (is 0 for log(base, 1))
+
+Examples:
+  To calculate the logarithm of 81 with base 3:
+  BC:01> log(3, 81)
+  => 4.00000000000000000001
+
+  To calculate the logarithm of -32 with base -2:
+  BC:01> log(-2, -32)
+  => 1.18568129418163251223 - .84157449683172082985 i
+  => 0
+*/
+define log(base, expr) {
+  auto real_part, imaginary_part
+
+  if (expr < 0) {
+
+    if (base > 0) {
+      real_part = l(-expr) / l(base)
+      imaginary_part = pi / l(base)
+    } else if (base < 0) {
+      real_part = (pi ^ 2 + l(-expr) * l(-base)) / (pi ^ 2 + l(-base) ^ 2)
+      imaginary_part = pi * (l(-base) - l(-expr)) / (pi ^ 2 + l(-base) ^ 2)
+    }
+
+  } else if (expr > 0 && base < 0) {
+    real_part = l(-base) * l(expr) / (pi ^ 2 + l(-base) ^ 2)
+    imaginary_part = pi * l(expr) / (pi ^ 2 + l(-base) ^ 2)
+  } else if (expr == 0 || base == 1 || base == 0) {
+    print "Undefined\n"
+    return 0
+  } else {
+    return l(expr) / l(base)
+  }
+
+  if (imaginary_part < 0) {
+    print real_part, \
+          " - ", \
+          -imaginary_part, \
+          " i\n"
+  } else {
+    print real_part, \
+          " + ", \
+          imaginary_part, \
+          " i\n" 
+  }
+
+ return 0
+}
+
+/*
+Calculates the n-th root of an expression.
+
+Both parameters, index and expr (the radicand), accept any real number as
+arguments.
+
+  - if expr > 0, the result will be a positive number
+  - if expr < 0, there will be different scenarios:
+      - if index is 2 (square root) or -2, the principal root will be calculated
+        as a multiple of i (b * i)
+      - if index (either positive or negative) is even or a floating point
+        number, the principal root will be calculated as a + b * i
+      - if index is odd, both the complex root (principal root) and the real-
+        valued root will be calculated
+      - if index is such that its reciprocal is a positive or negative integer,
+        the real-valued root will be calculated
+  - if expr == 0, the result is 0
+  - for index == 0, the root is undefined
+
+Returns:
+  - real-valued root, when present
+  - 0 in every other case
+
+Examples:
+  To calculate the square root of 16:
+    BC:01> root(2, 16)
+    => 4.00000000000000000000
+
+  To calculate the 6th root of the expression -(34 * 10 ^ -5.78):
+    BC:01> root(6, -(34 * pow(10, -5.78)))
+    => Principal root: .16960700472361698326 + .09792264983362639387 i
+*/
+define root(index, expr) {
+  auto calc_pi, inv_index, old_scale, sign, odd_nr_check, real_part, imaginary_part
+
+  if (index == 0) {
+    print "Undefined\n"
+  } else if (abs(index) == 1) {
+    return pow(expr, index)
+  } else if (expr < 0) {
+    old_scale = scale
+    inv_index = rec(index)
+    scale = 0
+
+    if (abs(index) == 2) {
+      sign = index / 2
+      scale = old_scale
+      print "Principal root: ", \
+            sign * sqrt(-expr) ^ sign, \
+            " i\n"
+    } else if (inv_index * 2 % 2 == 0) {
+      sign = -1 ^ rec(index)
+      scale = old_scale
+      return sign * e(l(-expr) / index)
+    } else {
+      odd_nr_check = abs(index) % 2
+      scale = old_scale
+      calc_pi = 4 * a(1)
+      real_part = e(l(-expr) / index) * c(calc_pi / index)
+      imaginary_part = e(l(-expr) / index) * s(calc_pi / index)
+
+      if (imaginary_part < 0) {
+        print "Principal root: ", \
+              real_part, \
+              " - ", \
+              -imaginary_part, \
+              " i\n"
+      } else {
+        print "Principal root: ", \
+              real_part, \
+              " + ", \
+              imaginary_part, \
+              " i\n"
+      }
+
+      if (odd_nr_check == 1) {
+          return -e(l(-expr) / index)
+      }
+
+    }
+
+  } else if (expr == 0) {
+  } else if (abs(index) == 2) {
+    old_scale = scale
+    scale = 0
+    sign = index / 2
+    scale = old_scale
+    return sqrt(expr) ^ sign
+  } else {
+    return e(l(expr) / index)
+  }
+
+  return 0
+}
+
+/*
+Calculates the sine of an angle.
+
+The function receives any angle in degrees as argument.
+
+Returns value.
+*/
 define sin(angle_deg) {
   auto angle_rad
   angle_rad = angle_deg * pi / 180
   return s(angle_rad)
 }
 
+/*
+Calculates the cosine of an angle.
+
+The function receives any angle in degrees as argument.
+
+Returns value.
+*/
 define cos(angle_deg) {
   auto angle_rad
   angle_rad = angle_deg * pi / 180
   return c(angle_rad)
 }
 
+/*
+Calculates the tangent of an angle.
+
+The function receives any angle in degrees as argument.
+
+Returns value.
+*/
 define tan(angle_deg) {
   return sin(angle_deg) / cos(angle_deg)
 }
 
-define ctg(angle_deg) {
+/*
+Calculates the cotangent of an angle.
+
+The function receives any angle in degrees as argument.
+
+Returns value.
+*/
+define cot(angle_deg) {
   return cos(angle_deg) / sin(angle_deg)
+}
+
+/*
+Returns the absolute value of an expression.
+
+Example:
+  To calculate the absolute value of 3 - 7:
+  BC:01> abs(3 - 7)
+  => 4
+*/
+define abs(expr) {
+
+  if (expr < 0) {
+    return -expr
+  } else {
+    return expr
+  }
+
+}
+
+/*
+Returns the reciprocal (multiplicative inverse) of an expression.
+
+Example:
+  To calculate the reciprocal of 2:
+    BC:01> rec(2)
+    => .50000000000000000000
+*/
+define rec(expr) {
+
+  if (expr == 0) {
+    print "Undefined\n"
+    return 0
+  } else {
+    return 1 / expr
+  }
+
+}
+
+/*
+Returns the modulus of an expression.
+
+Does not require changing the scale.
+
+Example:
+  To calculate 15 modulo (%) 9:
+  BC:01> mod(15, 9)
+  => 6
+*/
+define mod(expr, div) {
+  auto old_scale, modulus
+
+  old_scale = scale
+  scale = 0
+  modulus = expr % div
+  scale = old_scale
+
+  return modulus
+}
+
+/*
+Calculates the factorial of an integer.
+
+Returns:
+  - 0 when the argument is not a positive integer
+  - value when it is
+*/
+define fac(int) {
+
+  if (int < 0 || scale(int) != 0) {
+    print "Only positive integer arguments allowed.\n"
+    return 0
+  } else if (int == 0 || int == 1) {
+    return 1
+  } else {
+    return (fac(int - 1) * int)
+  }
+
+}
+
+/*
+Checks whether the argument is a prime number.
+
+Returns:
+  - 1 when arguments is prime
+  - 0 when it is not
+*/
+define isprime(x) {
+  auto old_scale, i, sq
+
+  if (x < 2) {
+    return 0
+  } else if (x == 2) {
+    return 1
+  }
+
+  sq = sqrt(x)
+  old_scale = scale
+  scale = 0
+
+  if (x % 2 == 0) {
+    scale = old_scale
+    return 0
+  } else if (x * 2 % 2 != 0) {
+    scale = old_scale
+    return 0
+  }
+
+  for (i = 3; i <= sq; i += 2) {
+
+    if (x % i == 0) {
+      scale = old_scale
+      return 0
+    }
+
+  }
+
+  scale = old_scale
+  return 1
+}
+
+/*
+Calculates the average for a set of numbers.
+
+The parameter count can receive as argument:
+  - the amount of numbers which will be given as input
+  - 0, in which case the function will receive input until 0 is given by the
+    user
+
+The function receives any single- or multi-line input as long as it contains
+numerical values (real numbers) separated by any combination of non-numerical
+characters (comma, semicolon, space, newline, etc).
+
+Returns:
+  - 0, if input in avg(0) is terminated immediately or if count is not a
+    natural number
+  - average (can be 0 if, for example, the average is calculated for a bunch of
+    0s for some reason)
+
+Examples:
+  To calculate the average of 3 numbers:
+    BC:01> avg(3)
+    IN:01< -1
+    IN:01< 0
+    IN:01< 1
+    => 0
+
+  To calculate the average, where the input is terminated by a 0:
+    BC:01> avg(0)
+    IN:01< 1 2 3 4 5 0
+    => 3
+
+  A working input for finding the average of 1, 2, 3, 4, 5, 6 and 7:
+    BC:01> avg(7)
+    IN:01< 1+2*3-4; 5 6
+    IN:01< 7
+    => 4
+*/
+define avg(count) {
+  auto old_scale, float_check, input, sum, counter
+
+  old_scale = scale
+  scale = 0
+  float_check = count * 2 % 2
+  scale = old_scale
+
+  if (count < 0 || float_check != 0) {
+    return 0
+  } else if (count == 0) {
+
+    while (input = read()) {
+      sum += input
+      counter += 1
+    }
+
+    if (counter == 0) {
+      return 0
+    }
+
+  } else {
+
+    for (counter = 0; counter < count; ++counter) {
+      sum += read()
+    }
+
+  }
+
+  return sum / counter
 }
 

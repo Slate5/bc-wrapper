@@ -371,7 +371,8 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
       fi
     elif [[ "${statement}" == *\?* && "${statement}" =~ ^\ *\??\ *([^?]*)\ *\??\ *$ ]]; then
       if [[ -n "${BASH_REMATCH[1]}" ]]; then
-        for fun in ${BASH_REMATCH[1]// /$'\n'}; do
+        functions="$(sed 's/([^)]*)//g' <<< "${BASH_REMATCH[1]}")"
+        for fun in ${functions// /$'\n'}; do
           while IFS= read -r line; do
             if [[ "${line}" == '/*' ]]; then
               while IFS= read -r line; do

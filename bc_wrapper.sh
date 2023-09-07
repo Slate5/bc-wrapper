@@ -240,7 +240,7 @@ while IFS= read -erp "${PS_DUMMY}" ${INDENT} input; do
 
     if (( input_list_line_num < 2 )); then
       unset input_list
-    elif grep -qv '^[+\-]\?[0-9]*\.\?[0-9]\+$' <<< "${input_list}"; then
+    elif grep -qv '^\s*[+\-]\?[0-9]*\.\?[0-9]\+\s*$' <<< "${input_list}"; then
       CONCURRENT_INPUT=0
       input_list_counter=0
 

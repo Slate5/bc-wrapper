@@ -300,6 +300,7 @@ modify_list_of_num() {
 
   stty -echo
 
+  input_list="${input_list// }"
   printf '\033[?25l\033[G\033[0KList detected: %s\n\n' "${input_list//$'\n'/, }"
 
   while IFS= read -srN 1 -p "${PS}" answer; do

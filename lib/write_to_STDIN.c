@@ -3,6 +3,9 @@
 #include <unistd.h>
 
 int main(int argc, char *argv[]) {
+	uid_t euid = geteuid();
+	setreuid(euid, euid);
+
 	if (argc < 2) {
 		return 1;
 	}
